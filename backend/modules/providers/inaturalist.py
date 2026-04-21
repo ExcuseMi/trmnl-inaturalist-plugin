@@ -9,25 +9,14 @@ INAT_API = 'https://api.inaturalist.org/v1/observations'
 PER_PAGE = 200  # iNaturalist API maximum
 PHOTO_SIZE = 'large'
 
-TAXON_IDS = {
-    'Aves': 3,
-    'Mammalia': 40151,
-    'Insecta': 47158,
-    'Plantae': 47126,
-    'Fungi': 47170,
-    'Reptilia': 26036,
-    'Amphibia': 20978,
-    'Actinopterygii': 47178,
-    'Arachnida': 47119,
-    'Mollusca': 47115,
-}
-
 
 async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
     fetch_pages = max(1, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')) // PER_PAGE)
     params: list[tuple] = [
         ('quality_grade', 'research'),
+        ('captive', 'false'),
+        ('popular', 'true'),
         ('photos', 'true'),
         ('per_page', PER_PAGE),
         ('order_by', 'votes'),
@@ -38,17 +27,18 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
         params.append(('photo_license', lic.strip()))
     if taxon:
         for t in taxon.split(','):
-            tid = TAXON_IDS.get(t)
-            if tid:
-                params.append(('taxon_id', tid))
+            params.append(('iconic_taxa', t.strip()))
 
     headers = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
     results: list[dict] = []
     seen_ids: set[int] = set()
+    last_id: int | None = None
 
     async with aiohttp.ClientSession(headers=headers) as session:
-        for page in range(1, fetch_pages + 1):
-            page_params = params + [('page', page)]
+        for _ in range(fetch_pages):
+            page_params = list(params)
+            if last_id is not None:
+                page_params.append(('id_below', last_id))
             async with session.get(
                 INAT_API,
                 params=page_params,
@@ -69,6 +59,8 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
 
             if len(items) < PER_PAGE:
                 break
+
+            last_id = min(item['id'] for item in items)
 
     log.info('Fetched %d observations from iNaturalist (taxon=%r locale=%s)', len(results), taxon or 'all', locale)
     return results
