@@ -26,6 +26,12 @@ app = Quart(__name__)
 FETCH_INTERVAL_HOURS = int(os.getenv('FETCH_INTERVAL_HOURS', '24'))
 TOP_LOCALES = os.getenv('PRECACHE_LOCALES', 'en,es,fr,de,pt,nl,it,ja,zh,ko').split(',')
 
+# All selectable categories plus '' for the no-filter default
+SEED_TAXA = [
+    '', 'Aves', 'Mammalia', 'Insecta', 'Plantae', 'Fungi',
+    'Reptilia', 'Amphibia', 'Actinopterygii', 'Arachnida', 'Mollusca',
+]
+
 
 @app.before_serving
 async def _startup():
@@ -115,9 +121,8 @@ async def _background_refresh():
         while True:
             queries = await get_known_queries()
             if not queries:
-                # Fresh install or reset — seed the default so the first request is served from cache
-                queries = [{'query_key': _query_key('', 'en'), 'taxon': '', 'locale': 'en'}]
-                log.info('Background refresh: no known queries, seeding default (all taxa, en)')
+                # Fresh install or reset — seed all categories so every filter is warm from the start
+                queries = [{'query_key': _query_key(t, 'en'), 'taxon': t, 'locale': 'en'} for t in SEED_TAXA]
             else:
                 log.info('Background refresh: checking %d known queries', len(queries))
                 for q in queries:
