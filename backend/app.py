@@ -96,11 +96,14 @@ async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str |
         return fallback
     cached = await get_cached_taxon_name(taxon_id, locale)
     if cached is not None:
+        log.debug('Taxon name cache hit taxon_id=%s locale=%s name=%r', taxon_id, locale, cached)
         return cached
     name = await fetch_taxon_name(taxon_id, locale)
     if name:
+        log.info('Taxon name fetched from iNaturalist taxon_id=%s locale=%s name=%r', taxon_id, locale, name)
         await cache_taxon_name(taxon_id, locale, name)
         return name
+    log.debug('Taxon name not found taxon_id=%s locale=%s, using English fallback', taxon_id, locale)
     return fallback
 
 
