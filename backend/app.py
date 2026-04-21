@@ -114,7 +114,11 @@ async def _background_refresh():
     try:
         while True:
             queries = await get_known_queries()
-            if queries:
+            if not queries:
+                # Fresh install or reset — seed the default so the first request is served from cache
+                queries = [{'query_key': _query_key('', 'en'), 'taxon': '', 'locale': 'en'}]
+                log.info('Background refresh: no known queries, seeding default (all taxa, en)')
+            else:
                 log.info('Background refresh: checking %d known queries', len(queries))
                 for q in queries:
                     taxon = q['taxon'] or ''
