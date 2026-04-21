@@ -6,7 +6,7 @@ import os
 from quart import Quart, jsonify, request
 
 from modules.providers.inaturalist import fetch_observations
-from modules.utils.geocode import reverse_geocode
+from modules.utils.geocode import forward_geocode, reverse_geocode
 from modules.utils.ip_whitelist import init_ip_whitelist, require_trmnl_ip
 from modules.utils.state import (
     claim_fetch,
@@ -43,7 +43,7 @@ async def health():
 async def observation():
     body = await request.get_json(silent=True, force=True) or {}
     plugin_setting_id = str(body.get('plugin_setting_id', ''))
-    taxon = body.get('taxon', '').strip()
+    taxon = _parse_taxon(body.get('taxon'))
     use_location = str(body.get('use_location', 'false')).lower() == 'true'
 
     units = body.get('units', 'metric')
@@ -51,14 +51,18 @@ async def observation():
     radius_km = 50
     if use_location:
         try:
-            lat = float(body.get('lat') or 0)
-            lng = float(body.get('lng') or 0)
             radius = int(body.get('radius') or 50)
             radius_km = round(radius * 1.60934) if units == 'imperial' else radius
-            if lat == 0 and lng == 0:
-                lat = lng = None
         except (TypeError, ValueError):
-            lat = lng = None
+            pass
+        address = str(body.get('location') or '').strip()
+        if address:
+            try:
+                coords = await forward_geocode(address)
+                if coords:
+                    lat, lng = coords
+            except Exception:
+                log.warning('Forward geocode failed for address %r', address)
 
     qkey = _query_key(taxon, lat, lng, radius_km if lat is not None else None)
     inst_key = plugin_setting_id or qkey
@@ -92,12 +96,23 @@ async def observation():
                 pass
         items.append({**obs, 'location_name': location_name})
 
-    log.info('Serving %d observations mode=%s key=%s', len(items), mode, qkey)
+    log.info('Serving %d observations key=%s', len(items), qkey)
     return jsonify({
         'items': items,
         'total_count': len(obs_ids),
         'error': None,
     })
+
+
+def _parse_taxon(raw) -> str:
+    """Normalise the multiselect taxon value to a sorted comma-separated string."""
+    if isinstance(raw, list):
+        values = [v.strip() for v in raw if v and v.strip()]
+    elif isinstance(raw, str) and raw.strip():
+        values = [v.strip() for v in raw.strip().strip('[]').replace('"', '').split(',') if v.strip()]
+    else:
+        values = []
+    return ','.join(sorted(values))
 
 
 def _query_key(taxon: str, lat, lng, radius_km) -> str:

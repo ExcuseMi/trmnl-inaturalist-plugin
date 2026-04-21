@@ -8,7 +8,7 @@ framework_version: 2.3.7
 serverless_language: ''
 polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'
-polling_body: '{"plugin_setting_id":"{{ trmnl.plugin_settings.id }}","taxon":"{{ trmnl.plugin_settings.custom_fields_values.taxon }}","use_location":"{{ trmnl.plugin_settings.custom_fields_values.use_location }}","lat":"{{ trmnl.plugin_settings.custom_fields_values.lat }}","lng":"{{ trmnl.plugin_settings.custom_fields_values.lng }}","radius":{{ trmnl.plugin_settings.custom_fields_values.radius | default: 50 }},"units":"{{ trmnl.plugin_settings.custom_fields_values.units | default: "metric" }}"}'
+polling_body: '{"plugin_setting_id":"{{ trmnl.plugin_settings.id }}","taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: "[]" }},"use_location":"{{ trmnl.plugin_settings.custom_fields_values.use_location }}","location":"{{ trmnl.plugin_settings.custom_fields_values.location }}","radius":{{ trmnl.plugin_settings.custom_fields_values.radius | default: 50 }},"units":"{{ trmnl.plugin_settings.custom_fields_values.units | default: "metric" }}"}'
 id: 290545
 custom_fields:
 - keyname: author_info
@@ -20,10 +20,10 @@ custom_fields:
   help_text: TRMNL X Ready
 - keyname: taxon
   field_type: select
-  name: Category
-  description: Filter observations by broad taxonomic group. Leave as "All" to see everything.
+  multiple: true
+  name: Categories
+  description: Filter by one or more groups. Leave empty to see all wildlife.
   options:
-  - All: ''
   - Birds: Aves
   - Mammals: Mammalia
   - Insects: Insecta
@@ -34,7 +34,6 @@ custom_fields:
   - Fish: Actinopterygii
   - Spiders & Arachnids: Arachnida
   - Mollusks: Mollusca
-  default: ''
   optional: true
 - keyname: use_location
   field_type: boolean
@@ -45,21 +44,14 @@ custom_fields:
   conditional_validation:
   - when: 'false'
     hidden:
-    - lat
-    - lng
+    - location
     - units
     - radius
-- keyname: lat
+- keyname: location
   field_type: string
-  name: Latitude
-  description: Decimal latitude of the center point (e.g. 51.5074 for London).
-  placeholder: '51.5074'
-  optional: true
-- keyname: lng
-  field_type: string
-  name: Longitude
-  description: Decimal longitude of the center point (e.g. -0.1278 for London).
-  placeholder: "-0.1278"
+  name: Location
+  description: City or area to search near (e.g. "Brussels, Belgium" or "Yosemite"). Takes priority over coordinates.
+  placeholder: Brussels, Belgium
   optional: true
 - keyname: units
   field_type: select

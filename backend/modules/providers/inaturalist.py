@@ -25,7 +25,7 @@ async def fetch_observations(
         'order': 'desc',
     }
     if taxon:
-        base_params['iconic_taxon_name'] = taxon
+        base_params['iconic_taxon_name'] = taxon  # comma-separated list accepted by iNat API
     if lat is not None and lng is not None and radius_km is not None:
         base_params['lat'] = lat
         base_params['lng'] = lng
