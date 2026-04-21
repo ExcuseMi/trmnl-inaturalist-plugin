@@ -14,7 +14,7 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: Wake up to a polar bear. A mantis shrimp. A mushroom that shouldn't exist.<br /><br />Every day this plugin pulls the <strong>most-loved wildlife photos</strong> from <a href="https://www.inaturalist.org" target="_blank">iNaturalist</a>. Real observations, real places, real people who stopped to look.<br /><br />Filter by birds, mammals, fungi, or any group you love.
+  description: Wake up to a polar bear. A mantis shrimp. A mushroom that shouldn't exist.<br /><br />Every day this plugin pulls the <strong>most-loved wildlife photos</strong> from <a href="https://www.inaturalist.org" target="_blank">iNaturalist</a>. Real observations, real places, real people who stopped to look.<br /><br />Animal names are shown in your language. Filter by birds, mammals, fungi, or any group you love.
   github_url: https://github.com/ExcuseMi/trmnl-inaturalist-plugin
   learn_more_url: https://www.inaturalist.org
   category: nature,images
