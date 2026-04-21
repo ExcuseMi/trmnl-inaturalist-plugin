@@ -24,6 +24,8 @@ app = Quart(__name__)
 
 FETCH_INTERVAL_HOURS = int(os.getenv('FETCH_INTERVAL_HOURS', '24'))
 
+TOP_LOCALES = os.getenv('PRECACHE_LOCALES', 'en,es,fr,de,pt,nl,it,ja,zh,ko').split(',')
+
 
 @app.before_serving
 async def _startup():
@@ -44,19 +46,33 @@ async def observation():
     body = await request.get_json(silent=True, force=True) or {}
     plugin_setting_id = str(body.get('plugin_setting_id', ''))
     taxon = _parse_taxon(body.get('taxon'))
+    locale = _normalize_locale(body.get('locale', 'en'))
 
-    qkey = _query_key(taxon)
+    qkey = _query_key(taxon, locale)
+    en_qkey = _query_key(taxon, 'en')
     inst_key = plugin_setting_id or qkey
 
     if await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
-        log.info('Fetching fresh observations for key=%s taxon=%r', qkey, taxon)
+        log.info('Fetching fresh observations key=%s taxon=%r locale=%s', qkey, taxon, locale)
         try:
-            fresh = await fetch_observations(taxon)
+            fresh = await fetch_observations(taxon, locale)
             await store_observations(qkey, fresh)
+            asyncio.create_task(_precache_locales(taxon, skip=locale))
         except Exception:
             log.exception('Failed to fetch observations from iNaturalist')
 
     obs_ids = await get_observation_ids(qkey)
+    if not obs_ids and locale != 'en':
+        log.info('No observations for locale=%s, falling back to en', locale)
+        qkey = en_qkey
+        if await claim_fetch(en_qkey, FETCH_INTERVAL_HOURS):
+            try:
+                fresh = await fetch_observations(taxon, 'en')
+                await store_observations(en_qkey, fresh)
+            except Exception:
+                log.exception('Failed to fetch English fallback observations')
+        obs_ids = await get_observation_ids(en_qkey)
+
     if not obs_ids:
         return jsonify(_error_response('No observations found.'))
 
@@ -69,20 +85,45 @@ async def observation():
         obs = await get_observation(obs_id, qkey)
         if not obs:
             continue
-        location_name = obs.get('place_guess')
-        if not location_name and obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
+        location_name = None
+        if obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
             try:
-                location_name = await reverse_geocode(obs['gps_lat'], obs['gps_lon'])
+                location_name = await reverse_geocode(obs['gps_lat'], obs['gps_lon'], locale)
             except Exception:
                 pass
+        if not location_name:
+            location_name = obs.get('place_guess')
         items.append({**obs, 'location_name': location_name})
 
-    log.info('Serving %d observations key=%s', len(items), qkey)
+    log.info('Serving %d observations key=%s locale=%s', len(items), qkey, locale)
     return jsonify({
         'items': items,
         'total_count': len(obs_ids),
         'error': None,
     })
+
+
+async def _precache_locales(taxon: str, skip: str):
+    for locale in TOP_LOCALES:
+        if locale == skip:
+            continue
+        qkey = _query_key(taxon, locale)
+        if not await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
+            continue
+        try:
+            fresh = await fetch_observations(taxon, locale)
+            await store_observations(qkey, fresh)
+            log.info('Pre-cached locale=%s taxon=%r', locale, taxon)
+        except Exception:
+            log.warning('Pre-cache failed locale=%s taxon=%r', locale, taxon)
+        await asyncio.sleep(2)
+
+
+def _normalize_locale(raw) -> str:
+    if not raw or not isinstance(raw, str):
+        return 'en'
+    code = raw.strip().split('-')[0].split('_')[0].lower()
+    return code or 'en'
 
 
 def _parse_taxon(raw) -> str:
@@ -95,8 +136,8 @@ def _parse_taxon(raw) -> str:
     return ','.join(sorted(values))
 
 
-def _query_key(taxon: str) -> str:
-    return hashlib.sha256((taxon or 'all').encode()).hexdigest()[:16]
+def _query_key(taxon: str, locale: str = 'en') -> str:
+    return hashlib.sha256(f"{taxon or 'all'}|{locale}".encode()).hexdigest()[:16]
 
 
 def _error_response(message: str) -> dict:

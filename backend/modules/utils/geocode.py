@@ -10,8 +10,8 @@ GEOCODE_TTL = 30 * 24 * 3600  # 30 days
 _UA = 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'
 
 
-def _key(lat: float, lon: float) -> str:
-    return f"{lat:.2f},{lon:.2f}"
+def _key(lat: float, lon: float, locale: str = 'en') -> str:
+    return f"{lat:.2f},{lon:.2f}|{locale}"
 
 
 async def forward_geocode(address: str) -> tuple[float, float] | None:
@@ -64,8 +64,8 @@ async def forward_geocode(address: str) -> tuple[float, float] | None:
     return result
 
 
-async def reverse_geocode(lat: float, lon: float) -> str | None:
-    key = _key(lat, lon)
+async def reverse_geocode(lat: float, lon: float, locale: str = 'en') -> str | None:
+    key = _key(lat, lon, locale)
 
     try:
         pool = await get_pool()
@@ -80,14 +80,11 @@ async def reverse_geocode(lat: float, lon: float) -> str | None:
 
     location = None
     try:
-        url = (
-            f"https://nominatim.openstreetmap.org/reverse"
-            f"?lat={lat}&lon={lon}&format=json&zoom=10"
-        )
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=10"
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url,
-                headers={'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'},
+                headers={'User-Agent': _UA, 'Accept-Language': locale},
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:
                 if resp.status == 200:

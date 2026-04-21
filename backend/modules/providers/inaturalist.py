@@ -7,11 +7,11 @@ log = logging.getLogger(__name__)
 
 INAT_API = 'https://api.inaturalist.org/v1/observations'
 PER_PAGE = 200   # iNaturalist API maximum
-FETCH_PAGES = 5  # fetch up to 5 pages (1000 observations) per daily refresh
+FETCH_PAGES = 2  # fetch up to 2 pages (400 observations) per daily refresh
 PHOTO_SIZE = 'large'
 
 
-async def fetch_observations(taxon: str) -> list[dict]:
+async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0')
     base_params: dict = {
         'quality_grade': 'research',
@@ -20,6 +20,7 @@ async def fetch_observations(taxon: str) -> list[dict]:
         'per_page': PER_PAGE,
         'order_by': 'votes',
         'order': 'desc',
+        'locale': locale,
     }
     if taxon:
         base_params['iconic_taxon_name'] = taxon
