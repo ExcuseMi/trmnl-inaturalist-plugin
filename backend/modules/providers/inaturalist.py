@@ -7,7 +7,7 @@ log = logging.getLogger(__name__)
 
 INAT_API = 'https://api.inaturalist.org/v1/observations'
 PER_PAGE = 200   # iNaturalist API maximum
-FETCH_PAGES = 2  # fetch up to 2 pages (400 observations) per daily refresh
+FETCH_PAGES = 1  # fetch top 200 observations per daily refresh
 PHOTO_SIZE = 'large'
 
 TAXON_IDS = {

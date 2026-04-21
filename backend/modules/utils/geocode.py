@@ -84,7 +84,7 @@ async def reverse_geocode(lat: float, lon: float, locale: str = 'en') -> str | N
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url,
-                headers={'User-Agent': _UA, 'Accept-Language': locale},
+                headers={'User-Agent': _UA, 'Accept-Language': f'{locale}, en;q=0.5'},
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:
                 if resp.status == 200:

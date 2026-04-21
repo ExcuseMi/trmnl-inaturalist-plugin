@@ -3,8 +3,7 @@
   .inat-empty  { position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
   .inat-empty--visible { display: flex; }
   .inat-license { position: absolute; top: 5px; right: 5px; z-index: 50; }
-  .inat-license--left { right: auto; left: 5px; }
-  .inat-qr    { position: absolute; top: 5px; right: 5px; z-index: 100; background: white; padding: 2px; box-sizing: content-box; }
+  .inat-qr .qr-code { right: auto; left: 1px; top: 1px; }
 </style>
 
 <script>var __inat = {{ items | json }};</script>
@@ -66,7 +65,6 @@
     if (attr.length) {
       licenseEl.textContent = attr.join(' · ');
       licenseEl.classList.remove('hidden');
-      if (qrEl) licenseEl.classList.add('inat-license--left');
     }
   }
 })();
