@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from quart import Quart, jsonify, request
 
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 app = Quart(__name__)
 
 FETCH_INTERVAL_HOURS = int(os.getenv('FETCH_INTERVAL_HOURS', '24'))
+REFRESH_UTC_HOUR = int(os.getenv('REFRESH_UTC_HOUR', '1'))
 
 SEED_TAXA = [
     'Aves', 'Mammalia', 'Insecta', 'Plantae', 'Fungi',
@@ -109,7 +111,11 @@ async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str |
 
 
 async def _background_refresh():
-    """Refreshes all SEED_TAXA once per FETCH_INTERVAL_HOURS."""
+    """Refreshes all SEED_TAXA at REFRESH_UTC_HOUR daily.
+
+    Runs immediately on startup so a missed scheduled window is caught,
+    then sleeps until the next scheduled UTC hour.
+    """
     await asyncio.sleep(10)
     try:
         while True:
@@ -128,7 +134,14 @@ async def _background_refresh():
                     except Exception:
                         log.exception('Background refresh: iNaturalist fetch failed taxon=%r sort=%s', q['taxon'], q['sort'])
                 await asyncio.sleep(2)
-            await asyncio.sleep(FETCH_INTERVAL_HOURS * 3600)
+
+            now = datetime.now(timezone.utc)
+            next_run = now.replace(hour=REFRESH_UTC_HOUR, minute=0, second=0, microsecond=0)
+            if next_run <= now:
+                next_run += timedelta(days=1)
+            sleep_seconds = (next_run - now).total_seconds()
+            log.info('Background refresh: next run at %s UTC (in %.0fs)', next_run.strftime('%H:%M'), sleep_seconds)
+            await asyncio.sleep(sleep_seconds)
     except asyncio.CancelledError:
         log.info('Background refresh task stopped')
         raise
