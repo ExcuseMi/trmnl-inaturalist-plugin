@@ -15,7 +15,11 @@ _HEADERS = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
 
 async def fetch_observations(taxon: str, sort: str = 'recent') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
-    fetch_pages = max(1, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')) // PER_PAGE)
+    if sort == 'recent':
+        count = int(os.getenv('OBSERVATIONS_RECENT', '200'))
+    else:
+        count = int(os.getenv('OBSERVATIONS_ALL_TIME', '600'))
+    fetch_pages = max(1, count // PER_PAGE)
     params: list[tuple] = [
         ('quality_grade', 'research'),
         ('captive', 'false'),
