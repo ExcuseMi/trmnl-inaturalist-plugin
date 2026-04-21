@@ -9,12 +9,11 @@ from modules.providers.inaturalist import fetch_observations
 from modules.utils.geocode import reverse_geocode
 from modules.utils.ip_whitelist import init_ip_whitelist, require_trmnl_ip
 from modules.utils.state import (
+    claim_fetch,
     get_observation,
     get_observation_ids,
     init_db,
-    mark_fetched,
     pick_observation,
-    should_fetch,
     store_observations,
 )
 
@@ -39,7 +38,7 @@ async def health():
     return jsonify({'ok': True})
 
 
-@app.route('/observation', methods=['POST'])
+@app.route('/observation', methods=['GET', 'POST'])
 @require_trmnl_ip
 async def observation():
     body = await request.get_json(silent=True, force=True) or {}
@@ -66,12 +65,11 @@ async def observation():
     qkey = _query_key(taxon, feed, lat, lng, radius_km if lat is not None else None)
     inst_key = plugin_setting_id or qkey
 
-    if await should_fetch(qkey, FETCH_INTERVAL_HOURS):
+    if await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
         log.info('Fetching fresh observations for key=%s taxon=%r feed=%s lat=%s lng=%s', qkey, taxon, feed, lat, lng)
         try:
             fresh = await fetch_observations(taxon, lat, lng, radius_km if lat is not None else None, feed)
             await store_observations(qkey, fresh)
-            await mark_fetched(qkey)
         except Exception:
             log.exception('Failed to fetch observations from iNaturalist')
 

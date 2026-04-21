@@ -31,50 +31,55 @@ async def init_db():
         try:
             _pool = await asyncpg.create_pool(DATABASE_URL)
             async with _pool.acquire() as conn:
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS observations (
-                        id BIGINT NOT NULL,
-                        query_key TEXT NOT NULL,
-                        taxon_id INTEGER,
-                        taxon_name TEXT,
-                        taxon_common_name TEXT,
-                        iconic_taxon_name TEXT,
-                        observed_on TEXT,
-                        photo_url TEXT,
-                        photo_license TEXT,
-                        photo_attribution TEXT,
-                        observer_login TEXT,
-                        observer_name TEXT,
-                        place_guess TEXT,
-                        gps_lat DOUBLE PRECISION,
-                        gps_lon DOUBLE PRECISION,
-                        fetched_at INTEGER NOT NULL,
-                        PRIMARY KEY (id, query_key)
-                    )
-                """)
-                await conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_obs_qkey_fetched
-                    ON observations (query_key, fetched_at DESC)
-                """)
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS fetch_log (
-                        query_key TEXT PRIMARY KEY,
-                        last_fetched INTEGER NOT NULL
-                    )
-                """)
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS instance_state (
-                        key TEXT PRIMARY KEY,
-                        state JSONB NOT NULL
-                    )
-                """)
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS geocode_cache (
-                        key TEXT PRIMARY KEY,
-                        location TEXT,
-                        cached_at INTEGER NOT NULL
-                    )
-                """)
+                # Advisory lock ensures only one worker runs schema creation at a time
+                await conn.execute("SELECT pg_advisory_lock(8317000)")
+                try:
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS observations (
+                            id BIGINT NOT NULL,
+                            query_key TEXT NOT NULL,
+                            taxon_id INTEGER,
+                            taxon_name TEXT,
+                            taxon_common_name TEXT,
+                            iconic_taxon_name TEXT,
+                            observed_on TEXT,
+                            photo_url TEXT,
+                            photo_license TEXT,
+                            photo_attribution TEXT,
+                            observer_login TEXT,
+                            observer_name TEXT,
+                            place_guess TEXT,
+                            gps_lat DOUBLE PRECISION,
+                            gps_lon DOUBLE PRECISION,
+                            fetched_at INTEGER NOT NULL,
+                            PRIMARY KEY (id, query_key)
+                        )
+                    """)
+                    await conn.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_obs_qkey_fetched
+                        ON observations (query_key, fetched_at DESC)
+                    """)
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS fetch_log (
+                            query_key TEXT PRIMARY KEY,
+                            last_fetched INTEGER NOT NULL
+                        )
+                    """)
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS instance_state (
+                            key TEXT PRIMARY KEY,
+                            state JSONB NOT NULL
+                        )
+                    """)
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS geocode_cache (
+                            key TEXT PRIMARY KEY,
+                            location TEXT,
+                            cached_at INTEGER NOT NULL
+                        )
+                    """)
+                finally:
+                    await conn.execute("SELECT pg_advisory_unlock(8317000)")
             log.info('PostgreSQL initialized')
             break
         except Exception as e:
@@ -86,31 +91,25 @@ async def init_db():
     return _pool
 
 
-async def should_fetch(query_key: str, interval_hours: int) -> bool:
+async def claim_fetch(query_key: str, interval_hours: int) -> bool:
+    """Atomically checks and claims the daily fetch slot. Returns True if this worker should fetch."""
+    now = int(time.time())
+    cutoff = now - interval_hours * 3600
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                'SELECT last_fetched FROM fetch_log WHERE query_key = $1', query_key
-            )
-            if row:
-                return (time.time() - row['last_fetched']) > interval_hours * 3600
+            result = await conn.execute("""
+                INSERT INTO fetch_log (query_key, last_fetched)
+                VALUES ($1, $2)
+                ON CONFLICT (query_key) DO UPDATE
+                    SET last_fetched = $2
+                    WHERE fetch_log.last_fetched < $3
+            """, query_key, now, cutoff)
+            # 'INSERT 0 1' = first ever fetch, 'UPDATE 1' = stale and claimed, 'UPDATE 0' = still fresh
+            return result in ('INSERT 0 1', 'UPDATE 1')
     except Exception as exc:
-        log.warning('Could not check fetch_log: %s', exc)
+        log.warning('Could not claim fetch for %s: %s', query_key, exc)
     return True
-
-
-async def mark_fetched(query_key: str):
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            await conn.execute(
-                'INSERT INTO fetch_log (query_key, last_fetched) VALUES ($1, $2) '
-                'ON CONFLICT (query_key) DO UPDATE SET last_fetched = EXCLUDED.last_fetched',
-                query_key, int(time.time()),
-            )
-    except Exception as exc:
-        log.warning('Could not update fetch_log: %s', exc)
 
 
 async def store_observations(query_key: str, observations: list[dict]):

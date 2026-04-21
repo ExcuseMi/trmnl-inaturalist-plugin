@@ -40,6 +40,9 @@ custom_fields:
   description: Only show observations near a specific location. Requires Latitude and Longitude below.
   default: 'false'
   optional: true
+  conditional_validation:
+    - when: 'false'
+      hidden: [lat, lng, units, radius]
 - keyname: lat
   field_type: string
   name: Latitude
