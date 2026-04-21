@@ -1,29 +1,26 @@
 {% template main %}
 <style>
-  .inat-img    { display: none; }
-  .inat-empty  { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+  .inat-empty  { position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
   .inat-empty--visible { display: flex; }
-  .inat-license { position: absolute; top: 5px; right: 5px; z-index: 50; display: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 10px; line-height: 1; padding: 3px 6px; border-radius: 3px; }
-  .inat-license--visible { display: block; }
+  .inat-license { position: absolute; top: 5px; right: 5px; z-index: 50; }
   .inat-license--left { right: auto; left: 5px; }
-  .inat-qr    { position: absolute; top: 5px; right: 5px; z-index: 100; background: white; padding: 2px; box-sizing: content-box; display: none; }
-  .inat-qr--visible { display: block; }
+  .inat-qr    { position: absolute; top: 5px; right: 5px; z-index: 100; background: white; padding: 2px; box-sizing: content-box; }
 </style>
 
 <script>var __inat = {{ items | json }};</script>
 
 {% if trmnl.plugin_settings.custom_fields_values.show_qr == "true" %}
   {% for item in items %}
-  <div class="inat-qr inat-qr-{{ forloop.index0 }}">
+  <div class="inat-qr inat-qr-{{ forloop.index0 }} hidden">
     {{ item.inat_url | qr_code: 2, "m" }}
   </div>
   {% endfor %}
 {% endif %}
 
 <div class="layout layout--stretch gap--none m--0 p--0">
-  <img class="image image-dither image--contain inat-img" src="" alt="" />
-  <div class="inat-license"></div>
-  <div class="inat-empty">
+  <img class="image image-dither image--contain inat-img hidden" src="" alt="" />
+  <span class="label label--inverted inat-license hidden"></span>
+  <div class="inat-empty hidden">
     <span class="label label--small">iNaturalist</span>
     <span class="description text--center">{{ error | default: 'No observations found.' }}</span>
   </div>
@@ -47,12 +44,12 @@
 
   if (!item || !item.photo_url) {
     var empty = host.querySelector('.inat-empty');
-    if (empty) empty.classList.add('inat-empty--visible');
+    if (empty) empty.classList.replace('hidden', 'inat-empty--visible');
     return;
   }
 
   var img = host.querySelector('.inat-img');
-  if (img) { img.src = item.photo_url; img.style.display = ''; }
+  if (img) { img.src = item.photo_url; img.classList.remove('hidden'); }
 
   var titleEl = host.querySelector('.inat-title');
   if (titleEl) titleEl.textContent = item.species || item.scientific || '';
@@ -61,7 +58,7 @@
   if (instanceEl) instanceEl.textContent = item.location || '';
 
   var qrEl = host.querySelector('.inat-qr-' + idx);
-  if (qrEl) qrEl.classList.add('inat-qr--visible');
+  if (qrEl) qrEl.classList.remove('hidden');
 
   var licenseEl = host.querySelector('.inat-license');
   if (licenseEl) {
@@ -70,7 +67,7 @@
     if (item.license)  attr.push(item.license);
     if (attr.length) {
       licenseEl.textContent = attr.join(' · ');
-      licenseEl.classList.add('inat-license--visible');
+      licenseEl.classList.remove('hidden');
       if (qrEl) licenseEl.classList.add('inat-license--left');
     }
   }
