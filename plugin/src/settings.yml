@@ -19,6 +19,15 @@ custom_fields:
   learn_more_url: https://www.inaturalist.org
   category: nature,images
   help_text: TRMNL X Ready
+- keyname: sort
+  field_type: select
+  name: Sort
+  description: "<strong>Recent</strong> — fresh wildlife from yesterday, new every day.<br /><strong>All time</strong> — the highest-voted observations ever submitted, the greatest hits of iNaturalist."
+  default: recent
+  options:
+  - "Recent — fresh from yesterday": recent
+  - "All time — highest voted ever": votes
+  optional: true
 - keyname: taxon
   field_type: select
   multiple: true
@@ -42,15 +51,6 @@ custom_fields:
   name: Show QR Code
   description: Overlay a scannable QR code so you can look up the observation on your phone.
   default: 'false'
-  optional: true
-- keyname: sort
-  field_type: select
-  name: Sort
-  description: "<strong>Recent</strong> shows yesterday's most-voted observations. <strong>All time</strong> shows the highest-voted observations ever."
-  default: recent
-  options:
-  - "Recent — yesterday's best": recent
-  - "All time — highest voted ever": votes
   optional: true
 name: Wildlife Observations by iNaturalist
 refresh_interval: 60
