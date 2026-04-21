@@ -14,7 +14,7 @@ custom_fields:
   field_type: author_bio
   description: Show research-grade wildlife observations from iNaturalist on your TRMNL display. A fresh batch of observations is fetched daily and cycled through on your device.<br><br>No iNaturalist account required — all data is public.
   github_url: https://github.com/ExcuseMi/trmnl-inaturalist-plugin
-  category: nature,photos
+  category: nature,images
   help_text: TRMNL X Ready
 - keyname: taxon
   field_type: select
