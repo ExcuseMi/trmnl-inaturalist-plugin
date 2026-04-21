@@ -44,13 +44,12 @@ async def health():
 @require_trmnl_ip
 async def observation():
     body = await request.get_json(silent=True, force=True) or {}
-    plugin_setting_id = str(body.get('plugin_setting_id', ''))
     taxon = _parse_taxon(body.get('taxon'))
     locale = _normalize_locale(body.get('locale', 'en'))
 
     qkey = _query_key(taxon, locale)
     en_qkey = _query_key(taxon, 'en')
-    inst_key = plugin_setting_id or qkey
+    inst_key = qkey
 
     if await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
         log.info('Fetching fresh observations key=%s taxon=%r locale=%s', qkey, taxon, locale)
