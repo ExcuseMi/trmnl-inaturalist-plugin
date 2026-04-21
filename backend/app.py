@@ -46,30 +46,30 @@ async def observation():
     taxon = _parse_taxon(body.get('taxon'))
     locale = _normalize_locale(body.get('locale', 'en'))
 
-    qkey = _query_key(locale)
-    en_qkey = _query_key('en')
+    qkey = _query_key(taxon, locale)
+    en_qkey = _query_key(taxon, 'en')
     inst_key = qkey
 
     if await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
-        log.info('Fetching fresh observations key=%s locale=%s', qkey, locale)
+        log.info('Fetching fresh observations key=%s taxon=%r locale=%s', qkey, taxon, locale)
         try:
-            fresh = await fetch_observations(locale)
+            fresh = await fetch_observations(taxon, locale)
             await store_observations(qkey, fresh)
-            asyncio.create_task(_precache_locales(skip=locale))
+            asyncio.create_task(_precache_locales(taxon, skip=locale))
         except Exception:
             log.exception('Failed to fetch observations from iNaturalist')
 
-    obs_ids = await get_observation_ids(qkey, taxon)
+    obs_ids = await get_observation_ids(qkey)
     if not obs_ids and locale != 'en':
         log.info('No observations for locale=%s taxon=%r, falling back to en', locale, taxon)
         qkey = en_qkey
         if await claim_fetch(en_qkey, FETCH_INTERVAL_HOURS):
             try:
-                fresh = await fetch_observations('en')
+                fresh = await fetch_observations(taxon, 'en')
                 await store_observations(en_qkey, fresh)
             except Exception:
                 log.exception('Failed to fetch English fallback observations')
-        obs_ids = await get_observation_ids(en_qkey, taxon)
+        obs_ids = await get_observation_ids(en_qkey)
 
     if not obs_ids:
         return jsonify(_error_response('No observations found.'))
@@ -101,19 +101,19 @@ async def observation():
     })
 
 
-async def _precache_locales(skip: str):
+async def _precache_locales(taxon: str, skip: str):
     for locale in TOP_LOCALES:
         if locale == skip:
             continue
-        qkey = _query_key(locale)
+        qkey = _query_key(taxon, locale)
         if not await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
             continue
         try:
-            fresh = await fetch_observations(locale)
+            fresh = await fetch_observations(taxon, locale)
             await store_observations(qkey, fresh)
-            log.info('Pre-cached locale=%s', locale)
+            log.info('Pre-cached locale=%s taxon=%r', locale, taxon)
         except Exception:
-            log.warning('Pre-cache failed locale=%s', locale)
+            log.warning('Pre-cache failed locale=%s taxon=%r', locale, taxon)
         await asyncio.sleep(2)
 
 
@@ -134,8 +134,8 @@ def _parse_taxon(raw) -> str:
     return ','.join(sorted(values))
 
 
-def _query_key(locale: str = 'en') -> str:
-    return hashlib.sha256(locale.encode()).hexdigest()[:16]
+def _query_key(taxon: str, locale: str = 'en') -> str:
+    return hashlib.sha256(f"{taxon or 'all'}|{locale}".encode()).hexdigest()[:16]
 
 
 def _error_response(message: str) -> dict:

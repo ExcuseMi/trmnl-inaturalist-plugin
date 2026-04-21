@@ -10,18 +10,37 @@ PER_PAGE = 200   # iNaturalist API maximum
 FETCH_PAGES = 2  # fetch up to 2 pages (400 observations) per daily refresh
 PHOTO_SIZE = 'large'
 
+TAXON_IDS = {
+    'Aves': 3,
+    'Mammalia': 40151,
+    'Insecta': 47158,
+    'Plantae': 47126,
+    'Fungi': 47170,
+    'Reptilia': 26036,
+    'Amphibia': 20978,
+    'Actinopterygii': 47178,
+    'Arachnida': 47119,
+    'Mollusca': 47115,
+}
 
-async def fetch_observations(locale: str = 'en') -> list[dict]:
+
+async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
-    base_params: dict = {
-        'quality_grade': 'research',
-        'photos': 'true',
-        'photo_license': photo_licenses,
-        'per_page': PER_PAGE,
-        'order_by': 'votes',
-        'order': 'desc',
-        'locale': locale,
-    }
+    params: list[tuple] = [
+        ('quality_grade', 'research'),
+        ('photos', 'true'),
+        ('per_page', PER_PAGE),
+        ('order_by', 'votes'),
+        ('order', 'desc'),
+        ('locale', locale),
+    ]
+    for lic in photo_licenses:
+        params.append(('photo_license', lic.strip()))
+    if taxon:
+        for t in taxon.split(','):
+            tid = TAXON_IDS.get(t)
+            if tid:
+                params.append(('taxon_id', tid))
 
     headers = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
     results: list[dict] = []
@@ -29,10 +48,10 @@ async def fetch_observations(locale: str = 'en') -> list[dict]:
 
     async with aiohttp.ClientSession(headers=headers) as session:
         for page in range(1, FETCH_PAGES + 1):
-            params = {**base_params, 'page': page}
+            page_params = params + [('page', page)]
             async with session.get(
                 INAT_API,
-                params=params,
+                params=page_params,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 resp.raise_for_status()
@@ -48,11 +67,10 @@ async def fetch_observations(locale: str = 'en') -> list[dict]:
                     seen_ids.add(obs['id'])
                     results.append(obs)
 
-            # Stop early if we got fewer results than requested
             if len(items) < PER_PAGE:
                 break
 
-    log.info('Fetched %d observations from iNaturalist (taxon=%r)', len(results), taxon or 'all')
+    log.info('Fetched %d observations from iNaturalist (taxon=%r locale=%s)', len(results), taxon or 'all', locale)
     return results
 
 
