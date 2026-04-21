@@ -24,7 +24,7 @@ The backend listens on port **8743** by default.
 
 | Field | Description |
 |---|---|
-| **Backend URL** | URL of your running backend, e.g. `https://your-host.com/observation` |
+
 | **Category** | Taxon filter: Birds, Mammals, Insects, Plants, Fungi, Reptiles, Amphibians, Fish, Arachnids, Mollusks, or All |
 | **Feed** | Popular (community-favourited, best photos) or Recent (newest observations) |
 | **Filter by Location** | Restrict to observations near a lat/lng point |
