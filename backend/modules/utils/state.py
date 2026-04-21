@@ -10,7 +10,7 @@ import asyncpg
 log = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/postgres')
-MAX_OBSERVATIONS = 200  # keep 1 page of 200 per query key
+MAX_OBSERVATIONS = max(200, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')))
 
 _pool = None
 

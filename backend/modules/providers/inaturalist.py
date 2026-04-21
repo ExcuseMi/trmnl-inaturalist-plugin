@@ -6,8 +6,7 @@ import aiohttp
 log = logging.getLogger(__name__)
 
 INAT_API = 'https://api.inaturalist.org/v1/observations'
-PER_PAGE = 200   # iNaturalist API maximum
-FETCH_PAGES = 1  # fetch top 200 observations per daily refresh
+PER_PAGE = 200  # iNaturalist API maximum
 PHOTO_SIZE = 'large'
 
 TAXON_IDS = {
@@ -26,6 +25,7 @@ TAXON_IDS = {
 
 async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
+    fetch_pages = max(1, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')) // PER_PAGE)
     params: list[tuple] = [
         ('quality_grade', 'research'),
         ('photos', 'true'),
@@ -47,7 +47,7 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
     seen_ids: set[int] = set()
 
     async with aiohttp.ClientSession(headers=headers) as session:
-        for page in range(1, FETCH_PAGES + 1):
+        for page in range(1, fetch_pages + 1):
             page_params = params + [('page', page)]
             async with session.get(
                 INAT_API,
