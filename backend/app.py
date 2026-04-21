@@ -25,6 +25,7 @@ app = Quart(__name__)
 
 FETCH_INTERVAL_HOURS = int(os.getenv('FETCH_INTERVAL_HOURS', '24'))
 TOP_LOCALES = os.getenv('PRECACHE_LOCALES', 'en,es,fr,de,pt,nl,it,ja,zh,ko').split(',')
+TOP_LOCALES = ['en'] + [l for l in TOP_LOCALES if l != 'en']
 
 # All selectable categories plus '' for the no-filter default
 SEED_TAXA = [
@@ -122,8 +123,8 @@ async def _background_refresh():
             # Build the full query set: seed matrix + any extra combinations from real requests
             seen = set()
             queries = []
-            for taxon in SEED_TAXA:
-                for locale in TOP_LOCALES:
+            for locale in TOP_LOCALES:
+                for taxon in SEED_TAXA:
                     key = _query_key(taxon, locale)
                     if key not in seen:
                         seen.add(key)
