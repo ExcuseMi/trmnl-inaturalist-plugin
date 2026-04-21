@@ -1,8 +1,6 @@
 import asyncio
-import json
 import logging
 import os
-import random
 import time
 
 import asyncpg
@@ -10,7 +8,6 @@ import asyncpg
 log = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/postgres')
-MAX_OBSERVATIONS = max(200, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')))
 TAXON_NAME_CACHE_TTL = 7 * 24 * 3600  # 7 days
 
 _pool = None
@@ -71,12 +68,6 @@ async def init_db():
                     await conn.execute("ALTER TABLE fetch_log ADD COLUMN IF NOT EXISTS taxon TEXT")
                     await conn.execute("ALTER TABLE fetch_log ADD COLUMN IF NOT EXISTS locale TEXT")
                     await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS instance_state (
-                            key TEXT PRIMARY KEY,
-                            state JSONB NOT NULL
-                        )
-                    """)
-                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS geocode_cache (
                             key TEXT PRIMARY KEY,
                             location TEXT,
@@ -106,25 +97,18 @@ async def init_db():
 
 
 async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '') -> bool:
-    """Atomically checks and claims the daily fetch slot. Returns True if this worker should fetch.
-
-    Also registers the taxon for this query_key so the background refresh
-    can re-fetch it without needing an incoming request.
-    """
+    """Atomically claims the fetch slot if stale. Returns True if this worker should fetch."""
     now = int(time.time())
     cutoff = now - interval_hours * 3600
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
-                # Always register taxon so the background task can rediscover this key
                 await conn.execute("""
                     INSERT INTO fetch_log (query_key, taxon, locale, last_fetched)
                     VALUES ($1, $2, '', 0)
                     ON CONFLICT (query_key) DO UPDATE SET taxon = EXCLUDED.taxon
                 """, query_key, taxon or '')
-
-                # Atomically claim the slot if stale
                 result = await conn.execute("""
                     UPDATE fetch_log SET last_fetched = $2
                     WHERE query_key = $1 AND last_fetched < $3
@@ -135,18 +119,45 @@ async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '') -> b
     return True
 
 
-async def get_known_queries() -> list[dict]:
-    """Returns all taxon values that have ever been requested."""
+async def get_observations(query_keys: list[str], count: int) -> list[dict]:
+    """Returns a random sample of observations from one or more query keys."""
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                'SELECT query_key, taxon FROM fetch_log WHERE taxon IS NOT NULL'
+                'SELECT * FROM observations WHERE query_key = ANY($1) ORDER BY RANDOM() LIMIT $2',
+                query_keys, count,
             )
             return [dict(row) for row in rows]
     except Exception as exc:
-        log.warning('Could not load known queries: %s', exc)
-        return []
+        log.warning('Could not load observations: %s', exc)
+    return []
+
+
+async def store_observations(query_key: str, observations: list[dict]):
+    if not observations:
+        return
+    now = int(time.time())
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('DELETE FROM observations WHERE query_key = $1', query_key)
+            for obs in observations:
+                await conn.execute("""
+                    INSERT INTO observations (
+                        id, query_key, taxon_id, taxon_name, taxon_common_name,
+                        iconic_taxon_name, observed_on, photo_url, photo_license,
+                        photo_attribution, observer_login, observer_name,
+                        place_guess, gps_lat, gps_lon, fetched_at
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                """,
+                    obs['id'], query_key, obs.get('taxon_id'), obs.get('taxon_name'),
+                    obs.get('taxon_common_name'), obs.get('iconic_taxon_name'),
+                    obs.get('observed_on'), obs.get('photo_url'), obs.get('photo_license'),
+                    obs.get('photo_attribution'), obs.get('observer_login'), obs.get('observer_name'),
+                    obs.get('place_guess'), obs.get('gps_lat'), obs.get('gps_lon'), now,
+                )
+    log.info('Stored %d observations for key=%s', len(observations), query_key)
 
 
 async def get_cached_taxon_name(taxon_id: int, locale: str) -> str | None:
@@ -174,103 +185,3 @@ async def cache_taxon_name(taxon_id: int, locale: str, common_name: str):
             )
     except Exception as exc:
         log.warning('Could not cache taxon name %s/%s: %s', taxon_id, locale, exc)
-
-
-async def store_observations(query_key: str, observations: list[dict]):
-    if not observations:
-        return
-    now = int(time.time())
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute('DELETE FROM observations WHERE query_key = $1', query_key)
-            for obs in observations:
-                await conn.execute("""
-                    INSERT INTO observations (
-                        id, query_key, taxon_id, taxon_name, taxon_common_name,
-                        iconic_taxon_name, observed_on, photo_url, photo_license,
-                        photo_attribution, observer_login, observer_name,
-                        place_guess, gps_lat, gps_lon, fetched_at
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-                """,
-                    obs['id'], query_key, obs.get('taxon_id'), obs.get('taxon_name'),
-                    obs.get('taxon_common_name'), obs.get('iconic_taxon_name'),
-                    obs.get('observed_on'), obs.get('photo_url'), obs.get('photo_license'),
-                    obs.get('photo_attribution'), obs.get('observer_login'), obs.get('observer_name'),
-                    obs.get('place_guess'), obs.get('gps_lat'), obs.get('gps_lon'), now,
-                )
-
-    log.info('Stored %d observations for key=%s', len(observations), query_key)
-
-
-async def get_observation_ids(query_key: str) -> list[int]:
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                'SELECT id FROM observations WHERE query_key = $1 ORDER BY fetched_at DESC, id DESC',
-                query_key,
-            )
-            return [row['id'] for row in rows]
-    except Exception as exc:
-        log.warning('Could not load observation ids: %s', exc)
-        return []
-
-
-async def get_observation(obs_id: int, query_key: str) -> dict | None:
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                'SELECT * FROM observations WHERE id = $1 AND query_key = $2',
-                obs_id, query_key,
-            )
-            return dict(row) if row else None
-    except Exception as exc:
-        log.warning('Could not load observation %s: %s', obs_id, exc)
-    return None
-
-
-async def pick_observations(obs_ids: list[int], mode: str, key: str, count: int = 4) -> list[int]:
-    if not obs_ids:
-        return []
-
-    if mode == 'random':
-        return random.sample(obs_ids, min(count, len(obs_ids)))
-
-    # Sequential: advance index by count each call
-    state = await _load_state(key)
-    idx = state.get('current_index', 0)
-    if idx >= len(obs_ids):
-        idx = 0
-
-    selected = [obs_ids[(idx + i) % len(obs_ids)] for i in range(min(count, len(obs_ids)))]
-    state['current_index'] = (idx + count) % len(obs_ids)
-    await _save_state(key, state)
-    return selected
-
-
-async def _load_state(key: str) -> dict:
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow('SELECT state FROM instance_state WHERE key = $1', key)
-            if row:
-                v = row['state']
-                return json.loads(v) if isinstance(v, str) else v
-    except Exception as exc:
-        log.warning('Could not load state for %s: %s', key, exc)
-    return {'current_index': 0}
-
-
-async def _save_state(key: str, state: dict):
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            await conn.execute(
-                'INSERT INTO instance_state (key, state) VALUES ($1, $2) '
-                'ON CONFLICT (key) DO UPDATE SET state = EXCLUDED.state',
-                key, json.dumps(state),
-            )
-    except Exception as exc:
-        log.warning('Could not save state for %s: %s', key, exc)

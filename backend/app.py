@@ -12,11 +12,8 @@ from modules.utils.state import (
     cache_taxon_name,
     claim_fetch,
     get_cached_taxon_name,
-    get_known_queries,
-    get_observation,
-    get_observation_ids,
+    get_observations,
     init_db,
-    pick_observations,
     store_observations,
 )
 
@@ -27,7 +24,6 @@ app = Quart(__name__)
 
 FETCH_INTERVAL_HOURS = int(os.getenv('FETCH_INTERVAL_HOURS', '24'))
 
-# All selectable categories — seeded on startup so every filter is warm before the first request
 SEED_TAXA = [
     'Aves', 'Mammalia', 'Insecta', 'Plantae', 'Fungi',
     'Reptilia', 'Amphibia', 'Actinopterygii', 'Arachnida', 'Mollusca',
@@ -55,32 +51,32 @@ async def observation():
     taxon = _parse_taxon(body.get('taxon'))
     locale = _normalize_locale(body.get('locale', 'en'))
 
-    qkey = _query_key(taxon)
+    taxon_list = [t.strip() for t in taxon.split(',') if t.strip()] if taxon else []
 
-    if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon):
-        log.info('Fetching fresh observations key=%s taxon=%r', qkey, taxon)
-        try:
-            fresh = await fetch_observations(taxon)
-            await store_observations(qkey, fresh)
-        except Exception:
-            log.exception('Failed to fetch observations from iNaturalist')
+    # Resolve query keys: multi-taxon composes from individual caches (OR), single uses its own key
+    if len(taxon_list) > 1:
+        query_keys = [_query_key(t) for t in taxon_list]
+        log.info('Composing from DB cache taxon=%r keys=%s', taxon, query_keys)
+    else:
+        qkey = _query_key(taxon)
+        if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon):
+            log.info('Cache miss — fetching from iNaturalist taxon=%r', taxon or 'all')
+            try:
+                fresh = await fetch_observations(taxon)
+                await store_observations(qkey, fresh)
+            except Exception:
+                log.exception('iNaturalist fetch failed taxon=%r', taxon or 'all')
+        else:
+            log.info('Cache hit — serving from DB taxon=%r', taxon or 'all')
+        query_keys = [qkey]
 
-    obs_ids = await get_observation_ids(qkey)
-    if not obs_ids:
+    selected_obs = await get_observations(query_keys, count=4)
+    if not selected_obs:
         return jsonify(_error_response('No observations found.'))
 
-    selected_ids = await pick_observations(obs_ids, 'random', qkey, count=4)
-    if not selected_ids:
-        return jsonify(_error_response('No observations available.'))
-
     items = []
-    for obs_id in selected_ids:
-        obs = await get_observation(obs_id, qkey)
-        if not obs:
-            continue
-
+    for obs in selected_obs:
         common_name = await _resolve_taxon_name(obs.get('taxon_id'), locale, obs.get('taxon_common_name'))
-
         location_name = None
         if obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
             try:
@@ -89,15 +85,10 @@ async def observation():
                 pass
         if not location_name:
             location_name = obs.get('place_guess')
-
         items.append({**obs, 'taxon_common_name': common_name, 'location_name': location_name})
 
-    log.info('Serving %d observations key=%s locale=%s taxon=%r', len(items), qkey, locale, taxon or 'all')
-    return jsonify({
-        'items': items,
-        'total_count': len(obs_ids),
-        'error': None,
-    })
+    log.info('Served %d observations from DB locale=%s taxon=%r', len(items), locale, taxon or 'all')
+    return jsonify({'items': items, 'total_count': len(items), 'error': None})
 
 
 async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str | None) -> str | None:
@@ -114,36 +105,20 @@ async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str |
 
 
 async def _background_refresh():
-    """Proactively refreshes all taxon combinations once per FETCH_INTERVAL_HOURS.
-
-    Covers the full SEED_TAXA list plus any custom multi-taxon combinations from real requests.
-    Locale is no longer a fetch concern — common names are resolved at serve time.
-    """
+    """Refreshes all SEED_TAXA once per FETCH_INTERVAL_HOURS."""
     await asyncio.sleep(10)
     try:
         while True:
-            seen = set()
-            queries = []
-            for taxon in SEED_TAXA:
-                key = _query_key(taxon)
-                if key not in seen:
-                    seen.add(key)
-                    queries.append({'query_key': key, 'taxon': taxon})
-            for q in await get_known_queries():
-                if q['query_key'] not in seen:
-                    seen.add(q['query_key'])
-                    queries.append(q)
-
+            queries = [{'query_key': _query_key(t), 'taxon': t} for t in SEED_TAXA]
             log.info('Background refresh: checking %d queries', len(queries))
             for q in queries:
-                taxon = q['taxon'] or ''
-                if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, taxon):
-                    log.info('Background refresh: fetching taxon=%r', taxon)
+                if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, q['taxon']):
+                    log.info('Background refresh: fetching from iNaturalist taxon=%r', q['taxon'])
                     try:
-                        fresh = await fetch_observations(taxon)
+                        fresh = await fetch_observations(q['taxon'])
                         await store_observations(q['query_key'], fresh)
                     except Exception:
-                        log.exception('Background refresh failed taxon=%r', taxon)
+                        log.exception('Background refresh: iNaturalist fetch failed taxon=%r', q['taxon'])
                 await asyncio.sleep(2)
             await asyncio.sleep(FETCH_INTERVAL_HOURS * 3600)
     except asyncio.CancelledError:
