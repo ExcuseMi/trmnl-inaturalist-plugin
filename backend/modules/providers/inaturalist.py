@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import date, timedelta
 
 import aiohttp
 
@@ -15,11 +16,13 @@ _HEADERS = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
 async def fetch_observations(taxon: str) -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
     fetch_pages = max(1, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')) // PER_PAGE)
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
     params: list[tuple] = [
         ('quality_grade', 'research'),
         ('captive', 'false'),
-        ('popular', 'true'),
         ('photos', 'true'),
+        ('d1', yesterday),
+        ('d2', yesterday),
         ('per_page', PER_PAGE),
         ('order_by', 'votes'),
         ('order', 'desc'),
