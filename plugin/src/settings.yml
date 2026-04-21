@@ -5,9 +5,11 @@ dark_mode: 'no'
 static_data: ''
 polling_verb: post
 framework_version: 2.3.7
-polling_url: "https://trmnl.bettens.dev/inaturalist/observation"
+serverless_language: ''
+polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'
 polling_body: '{"plugin_setting_id":"{{ trmnl.plugin_settings.id }}","taxon":"{{ trmnl.plugin_settings.custom_fields_values.taxon }}","feed":"{{ trmnl.plugin_settings.custom_fields_values.feed | default: "popular" }}","use_location":"{{ trmnl.plugin_settings.custom_fields_values.use_location }}","lat":"{{ trmnl.plugin_settings.custom_fields_values.lat }}","lng":"{{ trmnl.plugin_settings.custom_fields_values.lng }}","radius":{{ trmnl.plugin_settings.custom_fields_values.radius | default: 50 }},"units":"{{ trmnl.plugin_settings.custom_fields_values.units | default: "metric" }}","mode":"{{ trmnl.plugin_settings.custom_fields_values.mode | default: "sequential" }}"}'
+id: 290545
 custom_fields:
 - keyname: author_info
   name: About This Plugin
@@ -41,8 +43,12 @@ custom_fields:
   default: 'false'
   optional: true
   conditional_validation:
-    - when: 'false'
-      hidden: [lat, lng, units, radius]
+  - when: 'false'
+    hidden:
+    - lat
+    - lng
+    - units
+    - radius
 - keyname: lat
   field_type: string
   name: Latitude
@@ -53,7 +59,7 @@ custom_fields:
   field_type: string
   name: Longitude
   description: Decimal longitude of the center point (e.g. -0.1278 for London).
-  placeholder: '-0.1278'
+  placeholder: "-0.1278"
   optional: true
 - keyname: units
   field_type: select
@@ -111,6 +117,5 @@ custom_fields:
   - location
   - observer
   optional: true
-
 name: iNaturalist
 refresh_interval: 60
