@@ -6,11 +6,13 @@ import aiohttp
 log = logging.getLogger(__name__)
 
 INAT_API = 'https://api.inaturalist.org/v1/observations'
+INAT_TAXA_API = 'https://api.inaturalist.org/v1/taxa'
 PER_PAGE = 200  # iNaturalist API maximum
 PHOTO_SIZE = 'large'
+_HEADERS = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
 
 
-async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
+async def fetch_observations(taxon: str) -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
     fetch_pages = max(1, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')) // PER_PAGE)
     params: list[tuple] = [
@@ -21,7 +23,6 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
         ('per_page', PER_PAGE),
         ('order_by', 'votes'),
         ('order', 'desc'),
-        ('locale', locale),
     ]
     for lic in photo_licenses:
         params.append(('photo_license', lic.strip()))
@@ -29,12 +30,11 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
         for t in taxon.split(','):
             params.append(('iconic_taxa', t.strip()))
 
-    headers = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
     results: list[dict] = []
     seen_ids: set[int] = set()
     last_id: int | None = None
 
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession(headers=_HEADERS) as session:
         for _ in range(fetch_pages):
             page_params = list(params)
             if last_id is not None:
@@ -62,8 +62,23 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
 
             last_id = min(item['id'] for item in items)
 
-    log.info('Fetched %d observations from iNaturalist (taxon=%r locale=%s)', len(results), taxon or 'all', locale)
+    log.info('Fetched %d observations from iNaturalist (taxon=%r)', len(results), taxon or 'all')
     return results
+
+
+async def fetch_taxon_name(taxon_id: int, locale: str) -> str | None:
+    """Fetches the preferred common name for a taxon in the given locale."""
+    async with aiohttp.ClientSession(headers=_HEADERS) as session:
+        async with session.get(
+            f'{INAT_TAXA_API}/{taxon_id}',
+            params={'locale': locale},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            results = data.get('results') or []
+            return results[0].get('preferred_common_name') if results else None
 
 
 def _parse(item: dict) -> dict | None:

@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/postgres')
 MAX_OBSERVATIONS = max(200, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')))
+TAXON_NAME_CACHE_TTL = 7 * 24 * 3600  # 7 days
 
 _pool = None
 
@@ -67,7 +68,6 @@ async def init_db():
                             locale TEXT
                         )
                     """)
-                    # Migrate existing fetch_log rows that predate the taxon/locale columns
                     await conn.execute("ALTER TABLE fetch_log ADD COLUMN IF NOT EXISTS taxon TEXT")
                     await conn.execute("ALTER TABLE fetch_log ADD COLUMN IF NOT EXISTS locale TEXT")
                     await conn.execute("""
@@ -83,6 +83,15 @@ async def init_db():
                             cached_at INTEGER NOT NULL
                         )
                     """)
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS taxon_name_cache (
+                            taxon_id INTEGER NOT NULL,
+                            locale TEXT NOT NULL,
+                            common_name TEXT,
+                            cached_at INTEGER NOT NULL,
+                            PRIMARY KEY (taxon_id, locale)
+                        )
+                    """)
                 finally:
                     await conn.execute("SELECT pg_advisory_unlock(8317000)")
             log.info('PostgreSQL initialized')
@@ -96,10 +105,10 @@ async def init_db():
     return _pool
 
 
-async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '', locale: str = 'en') -> bool:
+async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '') -> bool:
     """Atomically checks and claims the daily fetch slot. Returns True if this worker should fetch.
 
-    Also registers the taxon/locale for this query_key so the background refresh
+    Also registers the taxon for this query_key so the background refresh
     can re-fetch it without needing an incoming request.
     """
     now = int(time.time())
@@ -108,13 +117,12 @@ async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '', loca
         pool = await get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
-                # Always register taxon/locale so the background task can rediscover this key
+                # Always register taxon so the background task can rediscover this key
                 await conn.execute("""
                     INSERT INTO fetch_log (query_key, taxon, locale, last_fetched)
-                    VALUES ($1, $2, $3, 0)
-                    ON CONFLICT (query_key) DO UPDATE
-                        SET taxon = EXCLUDED.taxon, locale = EXCLUDED.locale
-                """, query_key, taxon or '', locale or 'en')
+                    VALUES ($1, $2, '', 0)
+                    ON CONFLICT (query_key) DO UPDATE SET taxon = EXCLUDED.taxon
+                """, query_key, taxon or '')
 
                 # Atomically claim the slot if stale
                 result = await conn.execute("""
@@ -128,17 +136,44 @@ async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '', loca
 
 
 async def get_known_queries() -> list[dict]:
-    """Returns all taxon/locale combinations that have ever been requested."""
+    """Returns all taxon values that have ever been requested."""
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                'SELECT query_key, taxon, locale FROM fetch_log WHERE taxon IS NOT NULL AND locale IS NOT NULL'
+                'SELECT query_key, taxon FROM fetch_log WHERE taxon IS NOT NULL'
             )
             return [dict(row) for row in rows]
     except Exception as exc:
         log.warning('Could not load known queries: %s', exc)
         return []
+
+
+async def get_cached_taxon_name(taxon_id: int, locale: str) -> str | None:
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                'SELECT common_name FROM taxon_name_cache WHERE taxon_id = $1 AND locale = $2 AND cached_at > $3',
+                taxon_id, locale, int(time.time()) - TAXON_NAME_CACHE_TTL,
+            )
+            return row['common_name'] if row else None
+    except Exception as exc:
+        log.warning('Could not load taxon name cache %s/%s: %s', taxon_id, locale, exc)
+    return None
+
+
+async def cache_taxon_name(taxon_id: int, locale: str, common_name: str):
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                'INSERT INTO taxon_name_cache (taxon_id, locale, common_name, cached_at) VALUES ($1, $2, $3, $4) '
+                'ON CONFLICT (taxon_id, locale) DO UPDATE SET common_name = EXCLUDED.common_name, cached_at = EXCLUDED.cached_at',
+                taxon_id, locale, common_name, int(time.time()),
+            )
+    except Exception as exc:
+        log.warning('Could not cache taxon name %s/%s: %s', taxon_id, locale, exc)
 
 
 async def store_observations(query_key: str, observations: list[dict]):

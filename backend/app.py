@@ -5,11 +5,13 @@ import os
 
 from quart import Quart, jsonify, request
 
-from modules.providers.inaturalist import fetch_observations
+from modules.providers.inaturalist import fetch_observations, fetch_taxon_name
 from modules.utils.geocode import reverse_geocode
 from modules.utils.ip_whitelist import init_ip_whitelist, require_trmnl_ip
 from modules.utils.state import (
+    cache_taxon_name,
     claim_fetch,
+    get_cached_taxon_name,
     get_known_queries,
     get_observation,
     get_observation_ids,
@@ -24,10 +26,8 @@ log = logging.getLogger(__name__)
 app = Quart(__name__)
 
 FETCH_INTERVAL_HOURS = int(os.getenv('FETCH_INTERVAL_HOURS', '24'))
-TOP_LOCALES = os.getenv('PRECACHE_LOCALES', 'en,es,fr,de,pt,nl,it,ja,zh,ko').split(',')
-TOP_LOCALES = ['en'] + [l for l in TOP_LOCALES if l != 'en']
 
-# All selectable categories plus '' for the no-filter default
+# All selectable categories — seeded on startup so every filter is warm before the first request
 SEED_TAXA = [
     'Aves', 'Mammalia', 'Insecta', 'Plantae', 'Fungi',
     'Reptilia', 'Amphibia', 'Actinopterygii', 'Arachnida', 'Mollusca',
@@ -55,35 +55,21 @@ async def observation():
     taxon = _parse_taxon(body.get('taxon'))
     locale = _normalize_locale(body.get('locale', 'en'))
 
-    qkey = _query_key(taxon, locale)
-    en_qkey = _query_key(taxon, 'en')
-    inst_key = qkey
+    qkey = _query_key(taxon)
 
-    if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon, locale):
-        log.info('Fetching fresh observations key=%s taxon=%r locale=%s', qkey, taxon, locale)
+    if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon):
+        log.info('Fetching fresh observations key=%s taxon=%r', qkey, taxon)
         try:
-            fresh = await fetch_observations(taxon, locale)
+            fresh = await fetch_observations(taxon)
             await store_observations(qkey, fresh)
-            asyncio.create_task(_precache_locales(taxon, skip=locale))
         except Exception:
             log.exception('Failed to fetch observations from iNaturalist')
 
     obs_ids = await get_observation_ids(qkey)
-    if not obs_ids and locale != 'en':
-        log.info('No observations for locale=%s taxon=%r, falling back to en', locale, taxon)
-        qkey = en_qkey
-        if await claim_fetch(en_qkey, FETCH_INTERVAL_HOURS, taxon, 'en'):
-            try:
-                fresh = await fetch_observations(taxon, 'en')
-                await store_observations(en_qkey, fresh)
-            except Exception:
-                log.exception('Failed to fetch English fallback observations')
-        obs_ids = await get_observation_ids(en_qkey)
-
     if not obs_ids:
         return jsonify(_error_response('No observations found.'))
 
-    selected_ids = await pick_observations(obs_ids, 'random', inst_key, count=4)
+    selected_ids = await pick_observations(obs_ids, 'random', qkey, count=4)
     if not selected_ids:
         return jsonify(_error_response('No observations available.'))
 
@@ -92,6 +78,9 @@ async def observation():
         obs = await get_observation(obs_id, qkey)
         if not obs:
             continue
+
+        common_name = await _resolve_taxon_name(obs.get('taxon_id'), locale, obs.get('taxon_common_name'))
+
         location_name = None
         if obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
             try:
@@ -100,7 +89,8 @@ async def observation():
                 pass
         if not location_name:
             location_name = obs.get('place_guess')
-        items.append({**obs, 'location_name': location_name})
+
+        items.append({**obs, 'taxon_common_name': common_name, 'location_name': location_name})
 
     log.info('Serving %d observations key=%s locale=%s taxon=%r', len(items), qkey, locale, taxon or 'all')
     return jsonify({
@@ -110,25 +100,35 @@ async def observation():
     })
 
 
-async def _background_refresh():
-    """Proactively refreshes all taxon/locale combinations once per FETCH_INTERVAL_HOURS.
+async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str | None) -> str | None:
+    if not taxon_id or locale == 'en':
+        return fallback
+    cached = await get_cached_taxon_name(taxon_id, locale)
+    if cached is not None:
+        return cached
+    name = await fetch_taxon_name(taxon_id, locale)
+    if name:
+        await cache_taxon_name(taxon_id, locale, name)
+        return name
+    return fallback
 
-    Always covers the full SEED_TAXA × TOP_LOCALES matrix plus any custom combinations
-    users have requested, so every filter is warm before the first request of the day.
+
+async def _background_refresh():
+    """Proactively refreshes all taxon combinations once per FETCH_INTERVAL_HOURS.
+
+    Covers the full SEED_TAXA list plus any custom multi-taxon combinations from real requests.
+    Locale is no longer a fetch concern — common names are resolved at serve time.
     """
-    # Brief delay to let the server finish starting up
     await asyncio.sleep(10)
     try:
         while True:
-            # Build the full query set: seed matrix + any extra combinations from real requests
             seen = set()
             queries = []
-            for locale in TOP_LOCALES:
-                for taxon in SEED_TAXA:
-                    key = _query_key(taxon, locale)
-                    if key not in seen:
-                        seen.add(key)
-                        queries.append({'query_key': key, 'taxon': taxon, 'locale': locale})
+            for taxon in SEED_TAXA:
+                key = _query_key(taxon)
+                if key not in seen:
+                    seen.add(key)
+                    queries.append({'query_key': key, 'taxon': taxon})
             for q in await get_known_queries():
                 if q['query_key'] not in seen:
                     seen.add(q['query_key'])
@@ -137,35 +137,18 @@ async def _background_refresh():
             log.info('Background refresh: checking %d queries', len(queries))
             for q in queries:
                 taxon = q['taxon'] or ''
-                locale = q['locale'] or 'en'
-                if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, taxon, locale):
-                    log.info('Background refresh: fetching taxon=%r locale=%s', taxon, locale)
+                if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, taxon):
+                    log.info('Background refresh: fetching taxon=%r', taxon)
                     try:
-                        fresh = await fetch_observations(taxon, locale)
+                        fresh = await fetch_observations(taxon)
                         await store_observations(q['query_key'], fresh)
                     except Exception:
-                        log.exception('Background refresh failed taxon=%r locale=%s', taxon, locale)
-                await asyncio.sleep(2)  # stagger requests to iNaturalist
+                        log.exception('Background refresh failed taxon=%r', taxon)
+                await asyncio.sleep(2)
             await asyncio.sleep(FETCH_INTERVAL_HOURS * 3600)
     except asyncio.CancelledError:
         log.info('Background refresh task stopped')
         raise
-
-
-async def _precache_locales(taxon: str, skip: str):
-    for locale in TOP_LOCALES:
-        if locale == skip:
-            continue
-        qkey = _query_key(taxon, locale)
-        if not await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon, locale):
-            continue
-        try:
-            fresh = await fetch_observations(taxon, locale)
-            await store_observations(qkey, fresh)
-            log.info('Pre-cached locale=%s taxon=%r', locale, taxon)
-        except Exception:
-            log.warning('Pre-cache failed locale=%s taxon=%r', locale, taxon)
-        await asyncio.sleep(2)
 
 
 def _normalize_locale(raw) -> str:
@@ -185,8 +168,8 @@ def _parse_taxon(raw) -> str:
     return ','.join(sorted(values))
 
 
-def _query_key(taxon: str, locale: str = 'en') -> str:
-    return hashlib.sha256(f"{taxon or 'all'}|{locale}".encode()).hexdigest()[:16]
+def _query_key(taxon: str) -> str:
+    return hashlib.sha256((taxon or 'all').encode()).hexdigest()[:16]
 
 
 def _error_response(message: str) -> dict:
