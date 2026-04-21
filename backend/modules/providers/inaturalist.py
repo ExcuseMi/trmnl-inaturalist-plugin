@@ -11,12 +11,7 @@ FETCH_PAGES = 5  # fetch up to 5 pages (1000 observations) per daily refresh
 PHOTO_SIZE = 'large'
 
 
-async def fetch_observations(
-    taxon: str,
-    lat: float | None,
-    lng: float | None,
-    radius_km: int | None,
-) -> list[dict]:
+async def fetch_observations(taxon: str) -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0')
     base_params: dict = {
         'quality_grade': 'research',
@@ -27,11 +22,7 @@ async def fetch_observations(
         'order': 'desc',
     }
     if taxon:
-        base_params['iconic_taxon_name'] = taxon  # comma-separated list accepted by iNat API
-    if lat is not None and lng is not None and radius_km is not None:
-        base_params['lat'] = lat
-        base_params['lng'] = lng
-        base_params['radius'] = radius_km
+        base_params['iconic_taxon_name'] = taxon
 
     headers = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
     results: list[dict] = []

@@ -8,7 +8,7 @@ framework_version: 2.3.7
 serverless_language: ''
 polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'
-polling_body: '{"plugin_setting_id":"{{ trmnl.plugin_settings.id }}","taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: "[]" }},"use_location":"{{ trmnl.plugin_settings.custom_fields_values.use_location }}","location":"{{ trmnl.plugin_settings.custom_fields_values.location }}","radius":{{ trmnl.plugin_settings.custom_fields_values.radius | default: 50 }},"units":"{{ trmnl.plugin_settings.custom_fields_values.units | default: "metric" }}"}'
+polling_body: '{"plugin_setting_id":"{{ trmnl.plugin_settings.id }}","taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: "[]" }}}'
 id: 290545
 custom_fields:
 - keyname: author_info
@@ -35,45 +35,6 @@ custom_fields:
   - Fish: Actinopterygii
   - Spiders & Arachnids: Arachnida
   - Mollusks: Mollusca
-  optional: true
-- keyname: use_location
-  field_type: boolean
-  name: Filter by Location
-  description: Only show observations near a specific location. Requires Latitude and Longitude below.
-  default: 'false'
-  optional: true
-  conditional_validation:
-  - when: 'false'
-    hidden:
-    - location
-    - units
-    - radius
-- keyname: location
-  field_type: string
-  name: Location
-  description: City or area to search near (e.g. "Brussels, Belgium" or "Yosemite"). Takes priority over coordinates.
-  placeholder: Brussels, Belgium
-  optional: true
-- keyname: units
-  field_type: select
-  name: Units
-  description: Unit system for the search radius.
-  options:
-  - Metric (km): metric
-  - Imperial (miles): imperial
-  default: metric
-  optional: true
-- keyname: radius
-  field_type: select
-  name: Search Radius
-  description: How far from your location to search. Value is in km or miles depending on the Units setting above.
-  options:
-  - '10': 10
-  - '25': 25
-  - '50': 50
-  - '100': 100
-  - '250': 250
-  default: 50
   optional: true
 - keyname: show_qr
   field_type: boolean
