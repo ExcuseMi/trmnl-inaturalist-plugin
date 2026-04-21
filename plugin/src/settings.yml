@@ -8,7 +8,7 @@ framework_version: 2.3.7
 serverless_language: ''
 polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'
-polling_body: '{"taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: [] | json }},"locale":"{{ trmnl.user.locale | default: "en" }}"}'
+polling_body: '{"taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: [] | json }},"locale":"{{ trmnl.user.locale | default: "en" }}","sort":"{{ trmnl.plugin_settings.custom_fields_values.sort | default: "recent" }}"}'
 id: 290545
 custom_fields:
 - keyname: author_info
@@ -42,6 +42,15 @@ custom_fields:
   name: Show QR Code
   description: Overlay a scannable QR code so you can look up the observation on your phone.
   default: 'false'
+  optional: true
+- keyname: sort
+  field_type: select
+  name: Sort
+  description: "<strong>Recent</strong> shows yesterday's most-voted observations. <strong>All time</strong> shows the highest-voted observations ever."
+  default: recent
+  options:
+  - "Recent — yesterday's best": recent
+  - "All time — highest voted ever": votes
   optional: true
 name: Wildlife Observations by iNaturalist
 refresh_interval: 60

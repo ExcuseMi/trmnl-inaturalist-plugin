@@ -13,20 +13,21 @@ PHOTO_SIZE = 'large'
 _HEADERS = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
 
 
-async def fetch_observations(taxon: str) -> list[dict]:
+async def fetch_observations(taxon: str, sort: str = 'recent') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
     fetch_pages = max(1, int(os.getenv('OBSERVATIONS_PER_FETCH', '200')) // PER_PAGE)
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
     params: list[tuple] = [
         ('quality_grade', 'research'),
         ('captive', 'false'),
         ('photos', 'true'),
-        ('d1', yesterday),
-        ('d2', yesterday),
         ('per_page', PER_PAGE),
         ('order_by', 'votes'),
         ('order', 'desc'),
     ]
+    if sort == 'recent':
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        params.append(('d1', yesterday))
+        params.append(('d2', yesterday))
     for lic in photo_licenses:
         params.append(('photo_license', lic.strip()))
     if taxon:
@@ -65,7 +66,7 @@ async def fetch_observations(taxon: str) -> list[dict]:
 
             last_id = min(item['id'] for item in items)
 
-    log.info('Fetched %d observations from iNaturalist (taxon=%r)', len(results), taxon or 'all')
+    log.info('Fetched %d observations from iNaturalist (taxon=%r sort=%s)', len(results), taxon or 'all', sort)
     return results
 
 

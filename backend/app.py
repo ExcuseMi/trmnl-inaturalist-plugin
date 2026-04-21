@@ -51,23 +51,24 @@ async def observation():
     taxon = _parse_taxon(body.get('taxon'))
     locale = _normalize_locale(body.get('locale', 'en'))
 
+    sort = body.get('sort', 'recent') if body.get('sort') in ('recent', 'votes') else 'recent'
     taxon_list = [t.strip() for t in taxon.split(',') if t.strip()] if taxon else []
 
     # Resolve query keys: multi-taxon composes from individual caches (OR), single uses its own key
     if len(taxon_list) > 1:
-        query_keys = [_query_key(t) for t in taxon_list]
-        log.info('Composing from DB cache taxon=%r keys=%s', taxon, query_keys)
+        query_keys = [_query_key(t, sort) for t in taxon_list]
+        log.info('Composing from DB cache taxon=%r sort=%s keys=%s', taxon, sort, query_keys)
     else:
-        qkey = _query_key(taxon)
+        qkey = _query_key(taxon, sort)
         if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon):
-            log.info('Cache miss — fetching from iNaturalist taxon=%r', taxon or 'all')
+            log.info('Cache miss — fetching from iNaturalist taxon=%r sort=%s', taxon or 'all', sort)
             try:
-                fresh = await fetch_observations(taxon)
+                fresh = await fetch_observations(taxon, sort)
                 await store_observations(qkey, fresh)
             except Exception:
-                log.exception('iNaturalist fetch failed taxon=%r', taxon or 'all')
+                log.exception('iNaturalist fetch failed taxon=%r sort=%s', taxon or 'all', sort)
         else:
-            log.info('Cache hit — serving from DB taxon=%r', taxon or 'all')
+            log.info('Cache hit — serving from DB taxon=%r sort=%s', taxon or 'all', sort)
         query_keys = [qkey]
 
     selected_obs = await get_observations(query_keys, count=4)
@@ -87,7 +88,7 @@ async def observation():
             location_name = obs.get('place_guess')
         items.append({**obs, 'taxon_common_name': common_name, 'location_name': location_name})
 
-    log.info('Served %d observations from DB locale=%s taxon=%r', len(items), locale, taxon or 'all')
+    log.info('Served %d observations from DB locale=%s taxon=%r sort=%s', len(items), locale, taxon or 'all', sort)
     return jsonify({'items': items, 'total_count': len(items), 'error': None})
 
 
@@ -112,16 +113,20 @@ async def _background_refresh():
     await asyncio.sleep(10)
     try:
         while True:
-            queries = [{'query_key': _query_key(t), 'taxon': t} for t in SEED_TAXA]
+            queries = [
+                {'query_key': _query_key(t, s), 'taxon': t, 'sort': s}
+                for t in SEED_TAXA
+                for s in ('recent', 'votes')
+            ]
             log.info('Background refresh: checking %d queries', len(queries))
             for q in queries:
                 if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, q['taxon']):
-                    log.info('Background refresh: fetching from iNaturalist taxon=%r', q['taxon'])
+                    log.info('Background refresh: fetching from iNaturalist taxon=%r sort=%s', q['taxon'], q['sort'])
                     try:
-                        fresh = await fetch_observations(q['taxon'])
+                        fresh = await fetch_observations(q['taxon'], q['sort'])
                         await store_observations(q['query_key'], fresh)
                     except Exception:
-                        log.exception('Background refresh: iNaturalist fetch failed taxon=%r', q['taxon'])
+                        log.exception('Background refresh: iNaturalist fetch failed taxon=%r sort=%s', q['taxon'], q['sort'])
                 await asyncio.sleep(2)
             await asyncio.sleep(FETCH_INTERVAL_HOURS * 3600)
     except asyncio.CancelledError:
@@ -146,8 +151,8 @@ def _parse_taxon(raw) -> str:
     return ','.join(sorted(values))
 
 
-def _query_key(taxon: str) -> str:
-    return hashlib.sha256((taxon or 'all').encode()).hexdigest()[:16]
+def _query_key(taxon: str, sort: str = 'recent') -> str:
+    return hashlib.sha256(f"{taxon or 'all'}|{sort}".encode()).hexdigest()[:16]
 
 
 def _error_response(message: str) -> dict:
