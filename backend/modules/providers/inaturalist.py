@@ -10,21 +10,8 @@ PER_PAGE = 200   # iNaturalist API maximum
 FETCH_PAGES = 2  # fetch up to 2 pages (400 observations) per daily refresh
 PHOTO_SIZE = 'large'
 
-TAXON_IDS = {
-    'Aves': 3,
-    'Mammalia': 40151,
-    'Insecta': 47158,
-    'Plantae': 47126,
-    'Fungi': 47170,
-    'Reptilia': 26036,
-    'Amphibia': 20978,
-    'Actinopterygii': 47178,
-    'Arachnida': 47119,
-    'Mollusca': 47115,
-}
 
-
-async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
+async def fetch_observations(locale: str = 'en') -> list[dict]:
     photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0').split(',')
     base_params: dict = {
         'quality_grade': 'research',
@@ -35,10 +22,6 @@ async def fetch_observations(taxon: str, locale: str = 'en') -> list[dict]:
         'order': 'desc',
         'locale': locale,
     }
-    if taxon:
-        ids = [TAXON_IDS[t] for t in taxon.split(',') if t in TAXON_IDS]
-        if ids:
-            base_params['taxon_id'] = ids
 
     headers = {'User-Agent': 'TRMNL-iNaturalist-Plugin/1.0 (self-hosted)'}
     results: list[dict] = []

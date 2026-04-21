@@ -152,14 +152,20 @@ async def store_observations(query_key: str, observations: list[dict]):
     log.info('Stored %d observations for key=%s', len(observations), query_key)
 
 
-async def get_observation_ids(query_key: str) -> list[int]:
+async def get_observation_ids(query_key: str, taxon: str = '') -> list[int]:
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                'SELECT id FROM observations WHERE query_key = $1 ORDER BY fetched_at DESC, id DESC',
-                query_key,
-            )
+            if taxon:
+                rows = await conn.fetch(
+                    'SELECT id FROM observations WHERE query_key = $1 AND iconic_taxon_name = ANY($2) ORDER BY fetched_at DESC, id DESC',
+                    query_key, taxon.split(','),
+                )
+            else:
+                rows = await conn.fetch(
+                    'SELECT id FROM observations WHERE query_key = $1 ORDER BY fetched_at DESC, id DESC',
+                    query_key,
+                )
             return [row['id'] for row in rows]
     except Exception as exc:
         log.warning('Could not load observation ids: %s', exc)
