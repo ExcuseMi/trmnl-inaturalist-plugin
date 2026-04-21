@@ -90,15 +90,17 @@ async def reverse_geocode(lat: float, lon: float, locale: str = 'en') -> str | N
                 if resp.status == 200:
                     data = await resp.json()
                     addr = data.get('address', {})
-                    location = (
+                    place = (
                         addr.get('city')
                         or addr.get('town')
                         or addr.get('village')
                         or addr.get('municipality')
                         or addr.get('county')
                         or addr.get('state')
-                        or addr.get('country')
                     )
+                    country = addr.get('country_code', '').upper()
+                    parts = [p for p in [place, country] if p]
+                    location = ', '.join(parts) or None
     except Exception as exc:
         log.warning('Nominatim lookup failed for %.4f,%.4f: %s', lat, lon, exc)
 
