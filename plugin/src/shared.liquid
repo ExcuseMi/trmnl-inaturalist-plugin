@@ -58,14 +58,12 @@
   if (qrEl) qrEl.classList.remove('hidden');
 
   var licenseEl = host.querySelector('.inat-license');
-  if (licenseEl) {
+  if (licenseEl && item.license && item.license !== 'cc0') {
     var attr = [];
     if (item.observer) attr.push('© ' + item.observer);
-    if (item.license)  attr.push(item.license);
-    if (attr.length) {
-      licenseEl.textContent = attr.join(' · ');
-      licenseEl.classList.remove('hidden');
-    }
+    attr.push(item.license);
+    licenseEl.textContent = attr.join(' · ');
+    licenseEl.classList.remove('hidden');
   }
 })();
 </script>
