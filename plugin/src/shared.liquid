@@ -60,7 +60,7 @@
   var licenseEl = host.querySelector('.inat-license');
   if (licenseEl && item.license && item.license !== 'cc0') {
     var attr = [];
-    if (item.observer) attr.push('© ' + item.observer);
+    if (item.observer) attr.push(item.observer);
     attr.push(item.license);
     licenseEl.textContent = attr.join(' · ');
     licenseEl.classList.remove('hidden');
