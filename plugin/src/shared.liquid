@@ -1,0 +1,106 @@
+{% template main %}
+{% liquid
+  assign fields = trmnl.plugin_settings.custom_fields_values.overlay_fields | default: "species, location, observer, date"
+
+  assign show_species = false
+  assign show_scientific = false
+  assign show_location = false
+  assign show_observer = false
+  assign show_date = false
+  assign show_license = false
+
+  if fields contains 'species'
+    if obs.species
+      assign show_species = true
+    endif
+  endif
+  if fields contains 'scientific'
+    if obs.scientific
+      assign show_scientific = true
+    endif
+  endif
+  if fields contains 'location'
+    if obs.location
+      assign show_location = true
+    endif
+  endif
+  if fields contains 'observer'
+    if obs.observer
+      assign show_observer = true
+    endif
+  endif
+  if fields contains 'date'
+    if obs.observed_on
+      assign show_date = true
+    endif
+  endif
+  if fields contains 'license'
+    if obs.license
+      assign show_license = true
+    endif
+  endif
+
+  assign has_overlay = false
+  if show_species or show_scientific or show_location or show_observer or show_date or show_license
+    assign has_overlay = true
+  endif
+%}
+
+<style>
+  .inat-overlay {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    background-color: black;
+    color: white;
+    padding: 5px 12px 6px;
+    border-radius: 7px;
+    z-index: 10;
+    max-width: calc(100% - 20px);
+  }
+  .inat-credit {
+    opacity: 0.85;
+  }
+</style>
+
+<div class="layout layout--stretch layout--center gap--none m--0 p--0">
+  {% if obs.photo_url %}
+    <img
+      class="image image-dither image--cover w--auto h--auto w--max-full h--max-full"
+      style="object-position: center;"
+      src="{{ obs.photo_url }}">
+
+    {% if has_overlay %}
+      <div class="inat-overlay">
+        <div class="flex flex--col gap--none">
+          {% if show_species %}
+            <span class="title title--small text--white">{{ obs.species }}</span>
+          {% endif %}
+          {% if show_scientific %}
+            <span class="label label--small text--white" style="font-style: italic;">{{ obs.scientific }}</span>
+          {% endif %}
+          {% if show_location %}
+            <span class="label label--small text--white">{{ obs.location }}</span>
+          {% endif %}
+          {% if show_date %}
+            <span class="description text--white">{{ obs.observed_on }}</span>
+          {% endif %}
+          {% if show_observer or show_license %}
+            <span class="label label--small text--white inat-credit">
+              {%- if show_observer -%}© {{ obs.observer }}{%- endif -%}
+              {%- if show_observer and show_license %} · {% endif -%}
+              {%- if show_license -%}{{ obs.license }}{%- endif -%}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+  {% else %}
+    <div class="layout layout--col flex--center gap--small" style="align-items: center; justify-content: center; height: 100%; width: 100%;">
+      <span class="label label--small">iNaturalist</span>
+      <span class="description text--center" data-clamp="4">{{ error | default: 'No observations found.' }}</span>
+    </div>
+  {% endif %}
+</div>
+{% endtemplate %}

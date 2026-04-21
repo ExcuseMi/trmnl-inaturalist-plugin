@@ -1,0 +1,119 @@
+---
+strategy: polling
+no_screen_padding: 'yes'
+dark_mode: 'no'
+static_data: ''
+polling_verb: post
+framework_version: 2.3.7
+polling_url: "{{ trmnl.plugin_settings.custom_fields_values.backend_url | default: 'https://your-backend.example.com/observation' }}"
+polling_headers: 'Content-Type: application/json'
+polling_body: '{"plugin_setting_id":"{{ trmnl.plugin_settings.id }}","taxon":"{{ trmnl.plugin_settings.custom_fields_values.taxon }}","feed":"{{ trmnl.plugin_settings.custom_fields_values.feed | default: "popular" }}","use_location":"{{ trmnl.plugin_settings.custom_fields_values.use_location }}","lat":"{{ trmnl.plugin_settings.custom_fields_values.lat }}","lng":"{{ trmnl.plugin_settings.custom_fields_values.lng }}","radius":{{ trmnl.plugin_settings.custom_fields_values.radius | default: 50 }},"units":"{{ trmnl.plugin_settings.custom_fields_values.units | default: "metric" }}","mode":"{{ trmnl.plugin_settings.custom_fields_values.mode | default: "sequential" }}"}'
+custom_fields:
+- keyname: author_info
+  name: About This Plugin
+  field_type: author_bio
+  description: Show research-grade wildlife observations from iNaturalist on your TRMNL display. A fresh batch of observations is fetched daily and cycled through on your device.<br><br>No iNaturalist account required — all data is public.
+  github_url: https://github.com/ExcuseMi/trmnl-inaturalist-plugin
+  category: nature,photos
+  help_text: TRMNL X Ready
+- keyname: taxon
+  field_type: select
+  name: Category
+  description: Filter observations by broad taxonomic group. Leave as "All" to see everything.
+  options:
+  - All: ''
+  - Birds: Aves
+  - Mammals: Mammalia
+  - Insects: Insecta
+  - Plants: Plantae
+  - Fungi: Fungi
+  - Reptiles: Reptilia
+  - Amphibians: Amphibia
+  - Fish: Actinopterygii
+  - Spiders & Arachnids: Arachnida
+  - Mollusks: Mollusca
+  default: ''
+  optional: true
+- keyname: use_location
+  field_type: boolean
+  name: Filter by Location
+  description: Only show observations near a specific location. Requires Latitude and Longitude below.
+  default: 'false'
+  optional: true
+- keyname: lat
+  field_type: string
+  name: Latitude
+  description: Decimal latitude of the center point (e.g. 51.5074 for London).
+  placeholder: '51.5074'
+  optional: true
+- keyname: lng
+  field_type: string
+  name: Longitude
+  description: Decimal longitude of the center point (e.g. -0.1278 for London).
+  placeholder: '-0.1278'
+  optional: true
+- keyname: units
+  field_type: select
+  name: Units
+  description: Unit system for the search radius.
+  options:
+  - Metric (km): metric
+  - Imperial (miles): imperial
+  default: metric
+  optional: true
+- keyname: radius
+  field_type: select
+  name: Search Radius
+  description: How far from your location to search (only applies when Filter by Location is enabled). Value is in km or miles depending on the Units setting above.
+  options:
+  - '10': 10
+  - '25': 25
+  - '50': 50
+  - '100': 100
+  - '250': 250
+  default: 50
+  optional: true
+- keyname: feed
+  field_type: select
+  name: Feed
+  description: 'Popular: community-favourited observations (best photos).<br />Recent: newest research-grade observations.'
+  options:
+  - Popular: popular
+  - Recent: recent
+  default: popular
+  optional: true
+- keyname: mode
+  field_type: select
+  name: Selection Mode
+  description: 'Sequential: cycle through observations in order.<br />Random: pick a random observation each refresh.'
+  options:
+  - Sequential: sequential
+  - Random: random
+  default: sequential
+  optional: true
+- keyname: overlay_fields
+  field_type: select
+  multiple: true
+  name: Overlay Information
+  description: Choose what to show in the overlay at the bottom of the image. Leave empty to hide the overlay.
+  options:
+  - Common name: species
+  - Scientific name: scientific
+  - Location: location
+  - Observer: observer
+  - Date observed: date
+  - License: license
+  default:
+  - species
+  - location
+  - observer
+  optional: true
+- keyname: backend_url
+  field_type: url
+  name: Backend URL
+  description: URL of your self-hosted backend.
+  placeholder: https://your-backend.example.com/observation
+  optional: false
+
+name: iNaturalist
+refresh_interval: 60

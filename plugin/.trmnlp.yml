@@ -1,0 +1,40 @@
+# TRMNLP configuration
+# {{ env.VARIABLE }} interpolation is available here
+---
+watch:
+  - .trmnlp.yml
+  - src
+
+custom_fields: {}
+
+variables:
+  trmnl:
+    system:
+      timestamp_utc: 1700000000
+    plugin_settings:
+      instance_name: "iNaturalist"
+      strategy: polling
+      dark_mode: "no"
+      no_screen_padding: "yes"
+      custom_fields_values:
+        taxon: "Aves"
+        use_location: "false"
+        lat: ""
+        lng: ""
+        units: "metric"
+        radius: "50"
+        feed: "popular"
+        mode: "sequential"
+        overlay_fields: '["species","scientific","location","observer","license"]'
+  obs:
+    photo_url: "https://inaturalist-open-data.s3.amazonaws.com/photos/336879148/large.jpeg"
+    species: "Common Blackbird"
+    scientific: "Turdus merula"
+    iconic: "Aves"
+    location: "Amsterdam, Netherlands"
+    observed_on: "2024-01-15"
+    observer: "naturalist_jane"
+    license: "CC BY-NC"
+    attribution: "(c) naturalist_jane, some rights reserved (CC BY-NC)"
+  total_count: 47
+  error: null

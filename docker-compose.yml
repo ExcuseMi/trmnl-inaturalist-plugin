@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    container_name: trmnl-inaturalist-backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - postgres
+    ports:
+      - "${BACKEND_PORT:-8743}:8080"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}
+      - FETCH_INTERVAL_HOURS=${FETCH_INTERVAL_HOURS:-24}
+      - ENABLE_IP_WHITELIST=${ENABLE_IP_WHITELIST:-true}
+      - IP_REFRESH_HOURS=${IP_REFRESH_HOURS:-24}
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: trmnl-inaturalist-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
