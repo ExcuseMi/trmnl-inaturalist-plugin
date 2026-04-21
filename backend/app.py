@@ -28,7 +28,7 @@ TOP_LOCALES = os.getenv('PRECACHE_LOCALES', 'en,es,fr,de,pt,nl,it,ja,zh,ko').spl
 
 # All selectable categories plus '' for the no-filter default
 SEED_TAXA = [
-    '', 'Aves', 'Mammalia', 'Insecta', 'Plantae', 'Fungi',
+    'Aves', 'Mammalia', 'Insecta', 'Plantae', 'Fungi',
     'Reptilia', 'Amphibia', 'Actinopterygii', 'Arachnida', 'Mollusca',
 ]
 
