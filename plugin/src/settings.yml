@@ -43,5 +43,5 @@ custom_fields:
   description: Overlay a scannable QR code so you can look up the observation on your phone.
   default: 'false'
   optional: true
-name: iNaturalist Nature Observations
+name: Wildlife Observations by iNaturalist
 refresh_interval: 60
