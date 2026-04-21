@@ -1,4 +1,5 @@
 import logging
+import os
 
 import aiohttp
 
@@ -16,10 +17,11 @@ async def fetch_observations(
     lng: float | None,
     radius_km: int | None,
 ) -> list[dict]:
+    photo_licenses = os.getenv('PHOTO_LICENSES', 'cc-by,cc0')
     base_params: dict = {
         'quality_grade': 'research',
         'photos': 'true',
-        'photo_licensed': 'true',
+        'photo_license': photo_licenses,
         'per_page': PER_PAGE,
         'order_by': 'votes',
         'order': 'desc',

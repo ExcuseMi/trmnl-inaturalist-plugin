@@ -23,6 +23,7 @@ custom_fields:
   multiple: true
   name: Categories
   description: Filter by one or more groups. Leave empty to see all wildlife.
+  help_text: Use <kbd>⌘</kbd>+<kbd>click</kbd> or <kbd>ctrl</kbd>+<kbd>click</kbd> to select and deselect multiple options.
   options:
   - Birds: Aves
   - Mammals: Mammalia
