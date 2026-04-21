@@ -10,6 +10,7 @@ from modules.utils.geocode import reverse_geocode
 from modules.utils.ip_whitelist import init_ip_whitelist, require_trmnl_ip
 from modules.utils.state import (
     claim_fetch,
+    get_known_queries,
     get_observation,
     get_observation_ids,
     init_db,
@@ -32,6 +33,7 @@ async def _startup():
         init_db(),
         init_ip_whitelist(),
     )
+    asyncio.create_task(_background_refresh())
 
 
 @app.route('/health')
@@ -50,7 +52,7 @@ async def observation():
     en_qkey = _query_key(taxon, 'en')
     inst_key = qkey
 
-    if await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
+    if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon, locale):
         log.info('Fetching fresh observations key=%s taxon=%r locale=%s', qkey, taxon, locale)
         try:
             fresh = await fetch_observations(taxon, locale)
@@ -63,7 +65,7 @@ async def observation():
     if not obs_ids and locale != 'en':
         log.info('No observations for locale=%s taxon=%r, falling back to en', locale, taxon)
         qkey = en_qkey
-        if await claim_fetch(en_qkey, FETCH_INTERVAL_HOURS):
+        if await claim_fetch(en_qkey, FETCH_INTERVAL_HOURS, taxon, 'en'):
             try:
                 fresh = await fetch_observations(taxon, 'en')
                 await store_observations(en_qkey, fresh)
@@ -101,12 +103,42 @@ async def observation():
     })
 
 
+async def _background_refresh():
+    """Proactively refreshes all known taxon/locale combinations once per FETCH_INTERVAL_HOURS.
+
+    Runs immediately on startup so stale caches are warmed before the first request of the day,
+    then sleeps for the full interval before running again.
+    """
+    # Brief delay to let the server finish starting up
+    await asyncio.sleep(10)
+    try:
+        while True:
+            queries = await get_known_queries()
+            if queries:
+                log.info('Background refresh: checking %d known queries', len(queries))
+                for q in queries:
+                    taxon = q['taxon'] or ''
+                    locale = q['locale'] or 'en'
+                    if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, taxon, locale):
+                        log.info('Background refresh: fetching taxon=%r locale=%s', taxon, locale)
+                        try:
+                            fresh = await fetch_observations(taxon, locale)
+                            await store_observations(q['query_key'], fresh)
+                        except Exception:
+                            log.exception('Background refresh failed taxon=%r locale=%s', taxon, locale)
+                    await asyncio.sleep(2)  # stagger requests to iNaturalist
+            await asyncio.sleep(FETCH_INTERVAL_HOURS * 3600)
+    except asyncio.CancelledError:
+        log.info('Background refresh task stopped')
+        raise
+
+
 async def _precache_locales(taxon: str, skip: str):
     for locale in TOP_LOCALES:
         if locale == skip:
             continue
         qkey = _query_key(taxon, locale)
-        if not await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
+        if not await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon, locale):
             continue
         try:
             fresh = await fetch_observations(taxon, locale)

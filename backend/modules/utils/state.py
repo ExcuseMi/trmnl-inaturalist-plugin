@@ -62,9 +62,14 @@ async def init_db():
                     await conn.execute("""
                         CREATE TABLE IF NOT EXISTS fetch_log (
                             query_key TEXT PRIMARY KEY,
-                            last_fetched INTEGER NOT NULL
+                            last_fetched INTEGER NOT NULL,
+                            taxon TEXT,
+                            locale TEXT
                         )
                     """)
+                    # Migrate existing fetch_log rows that predate the taxon/locale columns
+                    await conn.execute("ALTER TABLE fetch_log ADD COLUMN IF NOT EXISTS taxon TEXT")
+                    await conn.execute("ALTER TABLE fetch_log ADD COLUMN IF NOT EXISTS locale TEXT")
                     await conn.execute("""
                         CREATE TABLE IF NOT EXISTS instance_state (
                             key TEXT PRIMARY KEY,
@@ -91,25 +96,49 @@ async def init_db():
     return _pool
 
 
-async def claim_fetch(query_key: str, interval_hours: int) -> bool:
-    """Atomically checks and claims the daily fetch slot. Returns True if this worker should fetch."""
+async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '', locale: str = 'en') -> bool:
+    """Atomically checks and claims the daily fetch slot. Returns True if this worker should fetch.
+
+    Also registers the taxon/locale for this query_key so the background refresh
+    can re-fetch it without needing an incoming request.
+    """
     now = int(time.time())
     cutoff = now - interval_hours * 3600
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
-            result = await conn.execute("""
-                INSERT INTO fetch_log (query_key, last_fetched)
-                VALUES ($1, $2)
-                ON CONFLICT (query_key) DO UPDATE
-                    SET last_fetched = $2
-                    WHERE fetch_log.last_fetched < $3
-            """, query_key, now, cutoff)
-            # 'INSERT 0 1' = first ever fetch, 'UPDATE 1' = stale and claimed, 'UPDATE 0' = still fresh
-            return result in ('INSERT 0 1', 'UPDATE 1')
+            async with conn.transaction():
+                # Always register taxon/locale so the background task can rediscover this key
+                await conn.execute("""
+                    INSERT INTO fetch_log (query_key, taxon, locale, last_fetched)
+                    VALUES ($1, $2, $3, 0)
+                    ON CONFLICT (query_key) DO UPDATE
+                        SET taxon = EXCLUDED.taxon, locale = EXCLUDED.locale
+                """, query_key, taxon or '', locale or 'en')
+
+                # Atomically claim the slot if stale
+                result = await conn.execute("""
+                    UPDATE fetch_log SET last_fetched = $2
+                    WHERE query_key = $1 AND last_fetched < $3
+                """, query_key, now, cutoff)
+                return result == 'UPDATE 1'
     except Exception as exc:
         log.warning('Could not claim fetch for %s: %s', query_key, exc)
     return True
+
+
+async def get_known_queries() -> list[dict]:
+    """Returns all taxon/locale combinations that have ever been requested."""
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                'SELECT query_key, taxon, locale FROM fetch_log WHERE taxon IS NOT NULL AND locale IS NOT NULL'
+            )
+            return [dict(row) for row in rows]
+    except Exception as exc:
+        log.warning('Could not load known queries: %s', exc)
+        return []
 
 
 async def store_observations(query_key: str, observations: list[dict]):
@@ -118,36 +147,23 @@ async def store_observations(query_key: str, observations: list[dict]):
     now = int(time.time())
     pool = await get_pool()
     async with pool.acquire() as conn:
-        for obs in observations:
-            await conn.execute("""
-                INSERT INTO observations (
-                    id, query_key, taxon_id, taxon_name, taxon_common_name,
-                    iconic_taxon_name, observed_on, photo_url, photo_license,
-                    photo_attribution, observer_login, observer_name,
-                    place_guess, gps_lat, gps_lon, fetched_at
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-                ON CONFLICT (id, query_key) DO UPDATE SET
-                    photo_url = EXCLUDED.photo_url,
-                    fetched_at = EXCLUDED.fetched_at
-            """,
-                obs['id'], query_key, obs.get('taxon_id'), obs.get('taxon_name'),
-                obs.get('taxon_common_name'), obs.get('iconic_taxon_name'),
-                obs.get('observed_on'), obs.get('photo_url'), obs.get('photo_license'),
-                obs.get('photo_attribution'), obs.get('observer_login'), obs.get('observer_name'),
-                obs.get('place_guess'), obs.get('gps_lat'), obs.get('gps_lon'), now,
-            )
-
-        # Keep the pool bounded per query_key
-        await conn.execute("""
-            DELETE FROM observations
-            WHERE query_key = $1
-              AND id NOT IN (
-                SELECT id FROM observations
-                WHERE query_key = $1
-                ORDER BY fetched_at DESC
-                LIMIT $2
-              )
-        """, query_key, MAX_OBSERVATIONS)
+        async with conn.transaction():
+            await conn.execute('DELETE FROM observations WHERE query_key = $1', query_key)
+            for obs in observations:
+                await conn.execute("""
+                    INSERT INTO observations (
+                        id, query_key, taxon_id, taxon_name, taxon_common_name,
+                        iconic_taxon_name, observed_on, photo_url, photo_license,
+                        photo_attribution, observer_login, observer_name,
+                        place_guess, gps_lat, gps_lon, fetched_at
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                """,
+                    obs['id'], query_key, obs.get('taxon_id'), obs.get('taxon_name'),
+                    obs.get('taxon_common_name'), obs.get('iconic_taxon_name'),
+                    obs.get('observed_on'), obs.get('photo_url'), obs.get('photo_license'),
+                    obs.get('photo_attribution'), obs.get('observer_login'), obs.get('observer_name'),
+                    obs.get('place_guess'), obs.get('gps_lat'), obs.get('gps_lon'), now,
+                )
 
     log.info('Stored %d observations for key=%s', len(observations), query_key)
 
