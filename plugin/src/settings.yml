@@ -8,7 +8,7 @@ framework_version: 2.3.7
 serverless_language: ''
 polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'
-polling_body: '{"taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: "[]" }},"locale":"{{ trmnl.user.locale | default: "en" }}"}'
+polling_body: '{"taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: [] | json }},"locale":"{{ trmnl.user.locale | default: "en" }}"}'
 id: 290545
 custom_fields:
 - keyname: author_info
