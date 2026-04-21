@@ -180,21 +180,21 @@ async def get_observation(obs_id: int, query_key: str) -> dict | None:
     return None
 
 
-async def pick_observation(obs_ids: list[int], mode: str, key: str) -> int | None:
+async def pick_observations(obs_ids: list[int], mode: str, key: str, count: int = 4) -> list[int]:
     if not obs_ids:
-        return None
+        return []
 
     if mode == 'random':
-        return random.choice(obs_ids)
+        return random.sample(obs_ids, min(count, len(obs_ids)))
 
-    # Sequential: cycle through via stored index
+    # Sequential: advance index by count each call
     state = await _load_state(key)
     idx = state.get('current_index', 0)
     if idx >= len(obs_ids):
         idx = 0
 
-    selected = obs_ids[idx]
-    state['current_index'] = (idx + 1) % len(obs_ids)
+    selected = [obs_ids[(idx + i) % len(obs_ids)] for i in range(min(count, len(obs_ids)))]
+    state['current_index'] = (idx + count) % len(obs_ids)
     await _save_state(key, state)
     return selected
 

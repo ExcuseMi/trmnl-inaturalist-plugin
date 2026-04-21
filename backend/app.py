@@ -13,7 +13,7 @@ from modules.utils.state import (
     get_observation,
     get_observation_ids,
     init_db,
-    pick_observation,
+    pick_observations,
     store_observations,
 )
 
@@ -77,24 +77,26 @@ async def observation():
     if not obs_ids:
         return jsonify(_error_response('No observations found. Try a broader taxon or location radius.'))
 
-    obs_id = await pick_observation(obs_ids, mode, inst_key)
-    if obs_id is None:
+    selected_ids = await pick_observations(obs_ids, mode, inst_key, count=4)
+    if not selected_ids:
         return jsonify(_error_response('No observations available.'))
 
-    obs = await get_observation(obs_id, qkey)
-    if not obs:
-        return jsonify(_error_response('Observation data missing.'))
+    items = []
+    for obs_id in selected_ids:
+        obs = await get_observation(obs_id, qkey)
+        if not obs:
+            continue
+        location_name = obs.get('place_guess')
+        if not location_name and obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
+            try:
+                location_name = await reverse_geocode(obs['gps_lat'], obs['gps_lon'])
+            except Exception:
+                pass
+        items.append({**obs, 'location_name': location_name})
 
-    location_name = obs.get('place_guess')
-    if not location_name and obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
-        try:
-            location_name = await reverse_geocode(obs['gps_lat'], obs['gps_lon'])
-        except Exception:
-            log.warning('Geocoding failed for observation %s', obs_id)
-
-    log.info('Serving observation %s (%s) mode=%s', obs_id, obs.get('taxon_name', '?'), mode)
+    log.info('Serving %d observations mode=%s key=%s', len(items), mode, qkey)
     return jsonify({
-        'observation': {**obs, 'location_name': location_name},
+        'items': items,
         'total_count': len(obs_ids),
         'error': None,
     })
