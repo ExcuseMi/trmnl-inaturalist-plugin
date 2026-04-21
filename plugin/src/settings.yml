@@ -14,8 +14,9 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: Show research-grade wildlife observations from iNaturalist on your TRMNL display. A fresh batch of the most popular observations is fetched daily and shown randomly on your device.<br><br>No iNaturalist account required — all data is public.
+  description: Wake up to a polar bear. A mantis shrimp. A mushroom that shouldn't exist.<br /><br />Every day this plugin pulls the <strong>most-loved wildlife photos</strong> from iNaturalist — real observations, real places, real people who stopped to look.<br /><br />Filter by birds, mammals, fungi, or any group you love. <strong>No account needed.</strong>
   github_url: https://github.com/ExcuseMi/trmnl-inaturalist-plugin
+  learn_more_url: https://www.inaturalist.org
   category: nature,images
   help_text: TRMNL X Ready
 - keyname: taxon
@@ -25,16 +26,16 @@ custom_fields:
   description: Filter by one or more groups. Leave empty to see all wildlife.
   help_text: Use <kbd>⌘</kbd>+<kbd>click</kbd> or <kbd>ctrl</kbd>+<kbd>click</kbd> to select and deselect multiple options.
   options:
-  - Birds: Aves
-  - Mammals: Mammalia
-  - Insects: Insecta
-  - Plants: Plantae
-  - Fungi: Fungi
-  - Reptiles: Reptilia
-  - Amphibians: Amphibia
-  - Fish: Actinopterygii
-  - Spiders & Arachnids: Arachnida
-  - Mollusks: Mollusca
+  - "Birds — eagles, penguins, songbirds": Aves
+  - "Mammals — whales, primates, big cats": Mammalia
+  - "Insects — butterflies, beetles, bees": Insecta
+  - "Plants — wildflowers, trees, cacti": Plantae
+  - "Fungi — mushrooms, lichens, molds": Fungi
+  - "Reptiles — snakes, lizards, turtles": Reptilia
+  - "Amphibians — frogs, salamanders, newts": Amphibia
+  - "Fish — reef fish, sharks, rays": Actinopterygii
+  - "Spiders & Arachnids — spiders, scorpions": Arachnida
+  - "Mollusks — octopus, snails, slugs": Mollusca
   optional: true
 - keyname: show_qr
   field_type: boolean
@@ -42,5 +43,5 @@ custom_fields:
   description: Overlay a scannable QR code so you can look up the observation on your phone.
   default: 'false'
   optional: true
-name: iNaturalist
+name: iNaturalist Nature Observations
 refresh_interval: 60
