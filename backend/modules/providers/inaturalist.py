@@ -15,15 +15,13 @@ async def fetch_observations(
     lat: float | None,
     lng: float | None,
     radius_km: int | None,
-    feed: str = 'popular',
 ) -> list[dict]:
-    order_by = 'votes' if feed == 'popular' else 'created_at'
     base_params: dict = {
         'quality_grade': 'research',
         'photos': 'true',
         'photo_licensed': 'true',
         'per_page': PER_PAGE,
-        'order_by': order_by,
+        'order_by': 'votes',
         'order': 'desc',
     }
     if taxon:
@@ -62,7 +60,7 @@ async def fetch_observations(
             if len(items) < PER_PAGE:
                 break
 
-    log.info('Fetched %d observations from iNaturalist (taxon=%r feed=%s)', len(results), taxon or 'all', feed)
+    log.info('Fetched %d observations from iNaturalist (taxon=%r)', len(results), taxon or 'all')
     return results
 
 

@@ -1,113 +1,59 @@
 {% template main %}
-{% liquid
-  assign fields = trmnl.plugin_settings.custom_fields_values.overlay_fields | default: "species, location, observer, date"
-%}
-
-<style>
-  .inat-wrap {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-  .inat-photo {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-  }
-  .inat-overlay {
-    position: absolute;
-    bottom: 5px;
-    left: 5px;
-    background-color: black;
-    color: white;
-    padding: 5px 12px 6px;
-    border-radius: 7px;
-    z-index: 10;
-    max-width: calc(100% - 20px);
-  }
-  .inat-species   { display: block; font-weight: bold; font-size: 0.8rem; }
-  .inat-scientific{ display: block; font-style: italic; font-size: 0.65rem; }
-  .inat-location  { display: block; font-size: 0.65rem; }
-  .inat-date      { display: block; font-size: 0.6rem; }
-  .inat-credit    { display: block; font-size: 0.6rem; opacity: 0.85; }
-  .inat-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 8px;
-  }
-</style>
-
 <script>var __inat = {{ items | json }};</script>
 
-<div class="layout layout--stretch gap--none m--0 p--0 inat-wrap" id="inat-root">
-  <img class="image image-dither inat-photo" src="" alt="" id="inat-img" style="display:none;" />
-  <div class="inat-overlay" id="inat-overlay" style="display:none;">
-    {% if fields contains 'species' %}
-      <span class="inat-species" id="inat-species"></span>
-    {% endif %}
-    {% if fields contains 'scientific' %}
-      <span class="inat-scientific" id="inat-scientific"></span>
-    {% endif %}
-    {% if fields contains 'location' %}
-      <span class="inat-location" id="inat-location"></span>
-    {% endif %}
-    {% if fields contains 'date' %}
-      <span class="inat-date" id="inat-date"></span>
-    {% endif %}
-    {% if fields contains 'observer' or fields contains 'license' %}
-      <span class="inat-credit" id="inat-credit"></span>
-    {% endif %}
+{% if trmnl.plugin_settings.custom_fields_values.show_qr == "true" %}
+  {% for item in items %}
+  <div class="inat-qr-{{ forloop.index0 }}" style="position:absolute;top:5px;right:5px;z-index:100;background:white;padding:2px;box-sizing:content-box;display:none;">
+    {{ item.inat_url | qr_code: 2, "m" }}
   </div>
-  <div class="inat-empty" id="inat-empty" style="display:none;">
+  {% endfor %}
+{% endif %}
+
+<div class="layout layout--stretch gap--none m--0 p--0">
+  <img class="image image-dither image--cover inat-img" src="" alt="" style="display:none;object-position:center;" />
+  <div class="inat-empty" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px;">
     <span class="label label--small">iNaturalist</span>
     <span class="description text--center">{{ error | default: 'No observations found.' }}</span>
   </div>
 </div>
 
+<div class="title_bar">
+  <svg class="image h--8" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+    <path d="M17 8C8 10 5.9 16.17 3.82 21H5.71C6.38 19.31 7.27 17.69 8.42 16.28C8.95 16.71 9.54 17.06 10.17 17.3C8.56 19.26 7.62 21.59 7.62 21.59H9.69C10.56 19.88 11.68 18.34 13.06 17.06C13.58 17.25 14.12 17.37 14.67 17.4C13.29 18.71 12.17 20.26 11.36 22H13.5C14.28 20.31 15.47 18.83 17 17.68C19.08 16.12 21 13.95 21 11C21 8.19 18.81 8 17 8M15 11.5C15 12.33 14.33 13 13.5 13C12.67 13 12 12.33 12 11.5C12 10.67 12.67 10 13.5 10C14.33 10 15 10.67 15 11.5Z"/>
+  </svg>
+  <span class="title inat-title"></span>
+  <span class="instance inat-instance"></span>
+</div>
+
 <script>
 (function() {
-  var root   = document.getElementById('inat-root');
+  var self   = document.currentScript;
   var views  = Array.from(document.querySelectorAll('.view'));
-  var host   = views.find(function(v) { return v.contains(root); });
-  var idx    = host ? views.indexOf(host) % 4 : 0;
+  var host   = views.find(function(v) { return v.contains(self); }) || document.body;
+  var idx    = views.indexOf(host) % 4;
   var item   = (__inat || [])[idx] || null;
 
   if (!item || !item.photo_url) {
-    document.getElementById('inat-empty').style.display = '';
+    var empty = host.querySelector('.inat-empty');
+    if (empty) { empty.style.display = 'flex'; }
     return;
   }
 
-  var img = document.getElementById('inat-img');
-  img.src = item.photo_url;
-  img.style.display = '';
+  var img = host.querySelector('.inat-img');
+  if (img) { img.src = item.photo_url; img.style.display = ''; }
 
-  var hasOverlay = false;
-  function setText(id, val) {
-    var el = document.getElementById(id);
-    if (el) { el.textContent = val || ''; if (val) hasOverlay = true; }
-  }
+  var titleEl = host.querySelector('.inat-title');
+  if (titleEl) titleEl.textContent = item.species || item.scientific || '';
 
-  setText('inat-species',    item.species);
-  setText('inat-scientific', item.scientific);
-  setText('inat-location',   item.location);
-  setText('inat-date',       item.observed_on);
+  var parts = [];
+  if (item.location) parts.push(item.location);
+  if (item.observer) parts.push('© ' + item.observer);
+  if (item.license)  parts.push(item.license);
+  var instanceEl = host.querySelector('.inat-instance');
+  if (instanceEl) instanceEl.textContent = parts.join(' · ');
 
-  var credit = document.getElementById('inat-credit');
-  if (credit) {
-    var parts = [];
-    if (item.observer) parts.push('© ' + item.observer);
-    if (item.license)  parts.push(item.license);
-    var val = parts.join(' · ');
-    credit.textContent = val;
-    if (val) hasOverlay = true;
-  }
-
-  if (hasOverlay) document.getElementById('inat-overlay').style.display = '';
+  var qrEl = host.querySelector('.inat-qr-' + idx);
+  if (qrEl) qrEl.style.display = 'block';
 })();
 </script>
 {% endtemplate %}

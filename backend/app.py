@@ -44,9 +44,7 @@ async def observation():
     body = await request.get_json(silent=True, force=True) or {}
     plugin_setting_id = str(body.get('plugin_setting_id', ''))
     taxon = body.get('taxon', '').strip()
-    feed = body.get('feed', 'popular') if body.get('feed') in ('popular', 'recent') else 'popular'
     use_location = str(body.get('use_location', 'false')).lower() == 'true'
-    mode = body.get('mode', 'sequential')
 
     units = body.get('units', 'metric')
     lat = lng = None
@@ -62,13 +60,13 @@ async def observation():
         except (TypeError, ValueError):
             lat = lng = None
 
-    qkey = _query_key(taxon, feed, lat, lng, radius_km if lat is not None else None)
+    qkey = _query_key(taxon, lat, lng, radius_km if lat is not None else None)
     inst_key = plugin_setting_id or qkey
 
     if await claim_fetch(qkey, FETCH_INTERVAL_HOURS):
-        log.info('Fetching fresh observations for key=%s taxon=%r feed=%s lat=%s lng=%s', qkey, taxon, feed, lat, lng)
+        log.info('Fetching fresh observations for key=%s taxon=%r lat=%s lng=%s', qkey, taxon, lat, lng)
         try:
-            fresh = await fetch_observations(taxon, lat, lng, radius_km if lat is not None else None, feed)
+            fresh = await fetch_observations(taxon, lat, lng, radius_km if lat is not None else None)
             await store_observations(qkey, fresh)
         except Exception:
             log.exception('Failed to fetch observations from iNaturalist')
@@ -77,7 +75,7 @@ async def observation():
     if not obs_ids:
         return jsonify(_error_response('No observations found. Try a broader taxon or location radius.'))
 
-    selected_ids = await pick_observations(obs_ids, mode, inst_key, count=4)
+    selected_ids = await pick_observations(obs_ids, 'random', inst_key, count=4)
     if not selected_ids:
         return jsonify(_error_response('No observations available.'))
 
@@ -102,8 +100,8 @@ async def observation():
     })
 
 
-def _query_key(taxon: str, feed: str, lat, lng, radius_km) -> str:
-    parts = [taxon or 'all', feed]
+def _query_key(taxon: str, lat, lng, radius_km) -> str:
+    parts = [taxon or 'all']
     if lat is not None and lng is not None:
         parts += [f'{lat:.3f}', f'{lng:.3f}', str(radius_km)]
     return hashlib.sha256('|'.join(parts).encode()).hexdigest()[:16]

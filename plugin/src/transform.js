@@ -11,6 +11,7 @@ function transform(data) {
       observed_on: obs.observed_on || null,
       observer:    obs.observer_name || obs.observer_login || null,
       license:     _license(obs.photo_license),
+      inat_url:    obs.id ? 'https://www.inaturalist.org/observations/' + obs.id : null,
     };
   });
 

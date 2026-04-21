@@ -1,5 +1,4 @@
 # TRMNLP configuration
-# {{ env.VARIABLE }} interpolation is available here
 ---
 watch:
   - .trmnlp.yml
@@ -12,6 +11,7 @@ variables:
     system:
       timestamp_utc: 1700000000
     plugin_settings:
+      id: preview-001
       instance_name: "iNaturalist"
       strategy: polling
       dark_mode: "no"
@@ -23,9 +23,7 @@ variables:
         lng: ""
         units: "metric"
         radius: "50"
-        feed: "popular"
-        mode: "sequential"
-        overlay_fields: '["species","scientific","location","observer","license"]'
+        show_qr: "false"
   items:
     - photo_url: "https://inaturalist-open-data.s3.amazonaws.com/photos/336879148/large.jpeg"
       species: "Common Blackbird"
@@ -35,6 +33,7 @@ variables:
       observed_on: "2024-01-15"
       observer: "naturalist_jane"
       license: "CC BY-NC"
+      inat_url: "https://www.inaturalist.org/observations/336879148"
     - photo_url: "https://inaturalist-open-data.s3.amazonaws.com/photos/336879148/large.jpeg"
       species: "King Penguin"
       scientific: "Aptenodytes patagonicus"
@@ -43,6 +42,7 @@ variables:
       observed_on: "2024-02-03"
       observer: "seabird_watcher"
       license: "CC BY"
+      inat_url: "https://www.inaturalist.org/observations/123456"
     - photo_url: "https://inaturalist-open-data.s3.amazonaws.com/photos/336879148/large.jpeg"
       species: "Fly Agaric"
       scientific: "Amanita muscaria"
@@ -51,6 +51,7 @@ variables:
       observed_on: "2024-10-12"
       observer: "fungal_fan"
       license: "CC BY-NC-SA"
+      inat_url: "https://www.inaturalist.org/observations/234567"
     - photo_url: "https://inaturalist-open-data.s3.amazonaws.com/photos/336879148/large.jpeg"
       species: "Monarch Butterfly"
       scientific: "Danaus plexippus"
@@ -59,5 +60,6 @@ variables:
       observed_on: "2024-09-28"
       observer: "butterfly_chaser"
       license: "CC BY"
+      inat_url: "https://www.inaturalist.org/observations/345678"
   total_count: 997
   error: null
