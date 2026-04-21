@@ -110,32 +110,41 @@ async def observation():
 
 
 async def _background_refresh():
-    """Proactively refreshes all known taxon/locale combinations once per FETCH_INTERVAL_HOURS.
+    """Proactively refreshes all taxon/locale combinations once per FETCH_INTERVAL_HOURS.
 
-    Runs immediately on startup so stale caches are warmed before the first request of the day,
-    then sleeps for the full interval before running again.
+    Always covers the full SEED_TAXA × TOP_LOCALES matrix plus any custom combinations
+    users have requested, so every filter is warm before the first request of the day.
     """
     # Brief delay to let the server finish starting up
     await asyncio.sleep(10)
     try:
         while True:
-            queries = await get_known_queries()
-            if not queries:
-                # Fresh install or reset — seed all categories so every filter is warm from the start
-                queries = [{'query_key': _query_key(t, 'en'), 'taxon': t, 'locale': 'en'} for t in SEED_TAXA]
-            else:
-                log.info('Background refresh: checking %d known queries', len(queries))
-                for q in queries:
-                    taxon = q['taxon'] or ''
-                    locale = q['locale'] or 'en'
-                    if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, taxon, locale):
-                        log.info('Background refresh: fetching taxon=%r locale=%s', taxon, locale)
-                        try:
-                            fresh = await fetch_observations(taxon, locale)
-                            await store_observations(q['query_key'], fresh)
-                        except Exception:
-                            log.exception('Background refresh failed taxon=%r locale=%s', taxon, locale)
-                    await asyncio.sleep(2)  # stagger requests to iNaturalist
+            # Build the full query set: seed matrix + any extra combinations from real requests
+            seen = set()
+            queries = []
+            for taxon in SEED_TAXA:
+                for locale in TOP_LOCALES:
+                    key = _query_key(taxon, locale)
+                    if key not in seen:
+                        seen.add(key)
+                        queries.append({'query_key': key, 'taxon': taxon, 'locale': locale})
+            for q in await get_known_queries():
+                if q['query_key'] not in seen:
+                    seen.add(q['query_key'])
+                    queries.append(q)
+
+            log.info('Background refresh: checking %d queries', len(queries))
+            for q in queries:
+                taxon = q['taxon'] or ''
+                locale = q['locale'] or 'en'
+                if await claim_fetch(q['query_key'], FETCH_INTERVAL_HOURS, taxon, locale):
+                    log.info('Background refresh: fetching taxon=%r locale=%s', taxon, locale)
+                    try:
+                        fresh = await fetch_observations(taxon, locale)
+                        await store_observations(q['query_key'], fresh)
+                    except Exception:
+                        log.exception('Background refresh failed taxon=%r locale=%s', taxon, locale)
+                await asyncio.sleep(2)  # stagger requests to iNaturalist
             await asyncio.sleep(FETCH_INTERVAL_HOURS * 3600)
     except asyncio.CancelledError:
         log.info('Background refresh task stopped')
