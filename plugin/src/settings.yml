@@ -35,6 +35,7 @@ custom_fields:
   - Spiders & Arachnids: Arachnida
   - Mollusks: Mollusca
   default: ''
+  multiple: true
   optional: true
 - keyname: use_location
   field_type: boolean
