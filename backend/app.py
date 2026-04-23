@@ -14,6 +14,7 @@ from modules.utils.state import (
     claim_fetch,
     get_cached_taxon_name,
     get_observations,
+    get_pool,
     init_db,
     reset_fetch_claim,
     store_observations,
@@ -63,7 +64,14 @@ async def observation():
         log.info('Composing from DB cache taxon=%r sort=%s keys=%s', taxon, sort, query_keys)
     else:
         qkey = _query_key(taxon, sort)
-        if await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon):
+        claimed = await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon)
+        if not claimed:
+            log.info('Cache hit — serving from DB taxon=%r sort=%s', taxon or 'all', sort)
+            if not await get_observations([qkey], count=1):
+                log.warning('Cache hit but DB empty for %r sort=%s — forcing re-fetch', taxon or 'all', sort)
+                await reset_fetch_claim(qkey)
+                claimed = True
+        if claimed:
             log.info('Cache miss — fetching from iNaturalist taxon=%r sort=%s', taxon or 'all', sort)
             try:
                 fresh = await fetch_observations(taxon, sort)
@@ -71,8 +79,6 @@ async def observation():
             except Exception:
                 log.exception('iNaturalist fetch failed taxon=%r sort=%s', taxon or 'all', sort)
                 await reset_fetch_claim(qkey)
-        else:
-            log.info('Cache hit — serving from DB taxon=%r sort=%s', taxon or 'all', sort)
         query_keys = [qkey]
 
     selected_obs = await get_observations(query_keys, count=4)
@@ -113,12 +119,24 @@ async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str |
 
 
 async def _background_refresh():
+    await asyncio.sleep(10)
+    pool = await get_pool()
+    async with pool.acquire() as _lock_conn:
+        if not await _lock_conn.fetchval('SELECT pg_try_advisory_lock(8317001)'):
+            log.info('Background refresh: another worker holds the lock, skipping')
+            return
+        try:
+            await _do_background_refresh()
+        finally:
+            await _lock_conn.execute('SELECT pg_advisory_unlock(8317001)')
+
+
+async def _do_background_refresh():
     """Refreshes all SEED_TAXA at REFRESH_UTC_HOUR daily.
 
     Runs immediately on startup so a missed scheduled window is caught,
     then sleeps until the next scheduled UTC hour.
     """
-    await asyncio.sleep(10)
     try:
         while True:
             queries = [
