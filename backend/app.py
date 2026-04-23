@@ -15,6 +15,7 @@ from modules.utils.state import (
     get_cached_taxon_name,
     get_observations,
     init_db,
+    reset_fetch_claim,
     store_observations,
 )
 
@@ -69,6 +70,7 @@ async def observation():
                 await store_observations(qkey, fresh)
             except Exception:
                 log.exception('iNaturalist fetch failed taxon=%r sort=%s', taxon or 'all', sort)
+                await reset_fetch_claim(qkey)
         else:
             log.info('Cache hit — serving from DB taxon=%r sort=%s', taxon or 'all', sort)
         query_keys = [qkey]
@@ -133,6 +135,7 @@ async def _background_refresh():
                         await store_observations(q['query_key'], fresh)
                     except Exception:
                         log.exception('Background refresh: iNaturalist fetch failed taxon=%r sort=%s', q['taxon'], q['sort'])
+                        await reset_fetch_claim(q['query_key'])
                 await asyncio.sleep(2)
 
             now = datetime.now(timezone.utc)

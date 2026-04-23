@@ -96,6 +96,19 @@ async def init_db():
     return _pool
 
 
+async def reset_fetch_claim(query_key: str):
+    """Resets the fetch claim so the next request re-fetches (used after a failed fetch)."""
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                'UPDATE fetch_log SET last_fetched = 0 WHERE query_key = $1',
+                query_key,
+            )
+    except Exception as exc:
+        log.warning('Could not reset fetch claim for %s: %s', query_key, exc)
+
+
 async def claim_fetch(query_key: str, interval_hours: int, taxon: str = '') -> bool:
     """Atomically claims the fetch slot if stale. Returns True if this worker should fetch."""
     now = int(time.time())
