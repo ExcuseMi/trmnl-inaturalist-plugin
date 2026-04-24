@@ -1,14 +1,14 @@
 ---
 strategy: polling
-no_screen_padding: 'yes'
+no_screen_padding: 'no'
 dark_mode: 'no'
 static_data: ''
 polling_verb: post
 framework_version: 2.3.7
-serverless_language: ''
+serverless_language: node
 polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'
-polling_body: '{"taxon":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: [] | json }},"locale":"{{ trmnl.user.locale | default: "en" }}","sort":"{{ trmnl.plugin_settings.custom_fields_values.sort | default: "recent" }}"}'
+polling_body: "{% liquid \r\nassign locale = trmnl.user.locale | default: \"en\"\r\nif trmnl.user.id == 6458\r\nassign locale = \"en\"\r\nendif\r\n%}\r\n{\"taxon\":{{ trmnl.plugin_settings.custom_fields_values.taxon | default: [] | json }},\"locale\":\"{{ locale }}\",\"sort\":\"{{ trmnl.plugin_settings.custom_fields_values.sort | default: \"recent\" }}\"}"
 id: 290545
 custom_fields:
 - keyname: author_info
@@ -25,8 +25,8 @@ custom_fields:
   description: "<strong>Recent</strong> fresh wildlife from yesterday, new every day.<br /><strong>All time</strong> the highest-voted observations ever submitted."
   default: recent
   options:
-  - "Recent: fresh from yesterday": recent
-  - "All time: highest voted ever": votes
+  - 'Recent: fresh from yesterday': recent
+  - 'All time: highest voted ever': votes
   optional: true
 - keyname: taxon
   field_type: select
@@ -35,16 +35,16 @@ custom_fields:
   description: Filter by one or more groups. Leave empty to see all wildlife.
   help_text: Use <kbd>⌘</kbd>+<kbd>click</kbd> or <kbd>ctrl</kbd>+<kbd>click</kbd> to select and deselect multiple options.
   options:
-  - "Birds (eagles, penguins, songbirds)": Aves
-  - "Mammals (whales, primates, big cats)": Mammalia
-  - "Insects (butterflies, beetles, bees)": Insecta
-  - "Plants (wildflowers, trees, cacti)": Plantae
-  - "Fungi (mushrooms, lichens, molds)": Fungi
-  - "Reptiles (snakes, lizards, turtles)": Reptilia
-  - "Amphibians (frogs, salamanders, newts)": Amphibia
-  - "Fish (reef fish, sharks, rays)": Actinopterygii
-  - "Spiders & Arachnids (spiders, scorpions)": Arachnida
-  - "Mollusks (octopus, snails, slugs)": Mollusca
+  - Birds (eagles, penguins, songbirds): Aves
+  - Mammals (whales, primates, big cats): Mammalia
+  - Insects (butterflies, beetles, bees): Insecta
+  - Plants (wildflowers, trees, cacti): Plantae
+  - Fungi (mushrooms, lichens, molds): Fungi
+  - Reptiles (snakes, lizards, turtles): Reptilia
+  - Amphibians (frogs, salamanders, newts): Amphibia
+  - Fish (reef fish, sharks, rays): Actinopterygii
+  - Spiders & Arachnids (spiders, scorpions): Arachnida
+  - Mollusks (octopus, snails, slugs): Mollusca
   optional: true
 - keyname: show_qr
   field_type: boolean
