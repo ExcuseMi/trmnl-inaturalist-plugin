@@ -27,7 +27,7 @@ async def init_db():
 
     for i in range(10):
         try:
-            _pool = await asyncpg.create_pool(DATABASE_URL)
+            _pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=5)
             async with _pool.acquire() as conn:
                 # Advisory lock ensures only one worker runs schema creation at a time
                 await conn.execute("SELECT pg_advisory_lock(8317000)")

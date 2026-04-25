@@ -18,7 +18,7 @@ async def fetch_observations(taxon: str, sort: str = 'recent') -> list[dict]:
     if sort == 'recent':
         count = int(os.getenv('OBSERVATIONS_RECENT', '200'))
     else:
-        count = int(os.getenv('OBSERVATIONS_ALL_TIME', '600'))
+        count = int(os.getenv('OBSERVATIONS_ALL_TIME', '100'))
     fetch_pages = max(1, count // PER_PAGE)
     params: list[tuple] = [
         ('quality_grade', 'research'),
@@ -53,11 +53,15 @@ async def fetch_observations(taxon: str, sort: str = 'recent') -> list[dict]:
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 resp.raise_for_status()
-                data = await resp.json()
+                raw = await resp.json()
 
-            items = data.get('results', [])
-            if not items:
+            items = raw.get('results', [])
+            del raw  # free full response dict immediately; items holds only the results list
+            n = len(items)
+            if not n:
                 break
+
+            last_id = min(item['id'] for item in items)
 
             for item in items:
                 obs = _parse(item)
@@ -65,10 +69,10 @@ async def fetch_observations(taxon: str, sort: str = 'recent') -> list[dict]:
                     seen_ids.add(obs['id'])
                     results.append(obs)
 
-            if len(items) < PER_PAGE:
-                break
+            del items  # release full iNat observation dicts; only parsed obs remain in results
 
-            last_id = min(item['id'] for item in items)
+            if n < PER_PAGE:
+                break
 
     log.info('Fetched %d observations from iNaturalist (taxon=%r sort=%s)', len(results), taxon or 'all', sort)
     return results
