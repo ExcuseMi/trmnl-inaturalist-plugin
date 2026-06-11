@@ -11,7 +11,7 @@
 {% if trmnl.plugin_settings.custom_fields_values.show_qr == "true" %}
   {% for item in items %}
   <div class="inat-qr inat-qr-{{ forloop.index0 }} hidden">
-    {{ item.inat_url | qr_code: 2, "m" }}
+    {{ item.inat_url | qr_code: 2, "m", "fixed" }}
   </div>
   {% endfor %}
 {% endif %}
