@@ -54,52 +54,60 @@ async def observation():
     body = await request.get_json(silent=True, force=True) or {}
     taxon = _parse_taxon(body.get('taxon'))
     locale = _normalize_locale(body.get('locale', 'en'))
-
     sort = body.get('sort', 'recent') if body.get('sort') in ('recent', 'votes') else 'recent'
-    taxon_list = [t.strip() for t in taxon.split(',') if t.strip()] if taxon else []
 
-    # Resolve query keys: multi-taxon composes from individual caches (OR), single uses its own key
-    if len(taxon_list) > 1:
-        query_keys = [_query_key(t, sort) for t in taxon_list]
-        log.info('Composing from DB cache taxon=%r sort=%s keys=%s', taxon, sort, query_keys)
-    else:
-        qkey = _query_key(taxon, sort)
-        claimed = await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon)
-        if not claimed:
-            log.info('Cache hit — serving from DB taxon=%r sort=%s', taxon or 'all', sort)
-            if not await get_observations([qkey], count=1):
-                log.warning('Cache hit but DB empty for %r sort=%s — forcing re-fetch', taxon or 'all', sort)
-                await reset_fetch_claim(qkey)
-                claimed = True
-        if claimed:
-            log.info('Cache miss — fetching from iNaturalist taxon=%r sort=%s', taxon or 'all', sort)
-            try:
-                fresh = await fetch_observations(taxon, sort)
-                await store_observations(qkey, fresh)
-            except Exception:
-                log.exception('iNaturalist fetch failed taxon=%r sort=%s', taxon or 'all', sort)
-                await reset_fetch_claim(qkey)
-        query_keys = [qkey]
+    try:
+        taxon_list = [t.strip() for t in taxon.split(',') if t.strip()] if taxon else []
 
-    selected_obs = await get_observations(query_keys, count=4)
-    if not selected_obs:
-        return jsonify(_error_response('No observations found.'))
+        # Resolve query keys: multi-taxon composes from individual caches (OR), single uses its own key
+        if len(taxon_list) > 1:
+            query_keys = [_query_key(t, sort) for t in taxon_list]
+            log.info('Composing from DB cache taxon=%r sort=%s keys=%s', taxon, sort, query_keys)
+        else:
+            qkey = _query_key(taxon, sort)
+            claimed = await claim_fetch(qkey, FETCH_INTERVAL_HOURS, taxon)
+            if not claimed:
+                log.info('Cache hit — serving from DB taxon=%r sort=%s', taxon or 'all', sort)
+                if not await get_observations([qkey], count=1):
+                    log.warning('Cache hit but DB empty for %r sort=%s — forcing re-fetch', taxon or 'all', sort)
+                    await reset_fetch_claim(qkey)
+                    claimed = True
+            if claimed:
+                log.info('Cache miss — fetching from iNaturalist taxon=%r sort=%s', taxon or 'all', sort)
+                try:
+                    fresh = await fetch_observations(taxon, sort)
+                    await store_observations(qkey, fresh)
+                except Exception:
+                    log.exception('iNaturalist fetch failed taxon=%r sort=%s', taxon or 'all', sort)
+                    await reset_fetch_claim(qkey)
+            query_keys = [qkey]
 
-    items = []
-    for obs in selected_obs:
-        common_name = await _resolve_taxon_name(obs.get('taxon_id'), locale, obs.get('taxon_common_name'))
-        location_name = None
-        if obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
-            try:
-                location_name = await reverse_geocode(obs['gps_lat'], obs['gps_lon'], locale)
-            except Exception:
-                pass
-        if not location_name:
-            location_name = obs.get('place_guess')
-        items.append({**obs, 'taxon_common_name': common_name, 'location_name': location_name})
+        selected_obs = await get_observations(query_keys, count=4)
+        if not selected_obs:
+            return jsonify(_error_response('No observations found.'))
 
-    log.info('Served %d observations from DB locale=%s taxon=%r sort=%s', len(items), locale, taxon or 'all', sort)
-    return jsonify({'items': items, 'total_count': len(items), 'error': None})
+        items = []
+        for obs in selected_obs:
+            common_name = await _resolve_taxon_name(obs.get('taxon_id'), locale, obs.get('taxon_common_name'))
+            location_name = None
+            if obs.get('gps_lat') is not None and obs.get('gps_lon') is not None:
+                try:
+                    location_name = await reverse_geocode(obs['gps_lat'], obs['gps_lon'], locale)
+                except Exception:
+                    pass
+            if not location_name:
+                location_name = obs.get('place_guess')
+            items.append({**obs, 'taxon_common_name': common_name, 'location_name': location_name})
+
+        log.info('Served %d observations from DB locale=%s taxon=%r sort=%s', len(items), locale, taxon or 'all', sort)
+        return jsonify({'items': items, 'total_count': len(items), 'error': None})
+    except Exception as exc:
+        # A transient DB/Redis hiccup here would otherwise propagate as an unhandled
+        # exception -> Quart's default HTML 500 page, which TRMNL can't parse into
+        # merge variables at all (surfaces as "plugin data failed to save" rather
+        # than a normal HTTP error). Degrade to a friendly, valid JSON 200 instead.
+        log.exception('Unhandled error building /observation response')
+        return jsonify(_error_response(str(exc)))
 
 
 async def _resolve_taxon_name(taxon_id: int | None, locale: str, fallback: str | None) -> str | None:
