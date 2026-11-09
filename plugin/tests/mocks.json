@@ -1,0 +1,54 @@
+{
+  "https://trmnl.bettens.dev/inaturalist/observation": {
+    "json": {
+      "items": [
+        {
+          "photo_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1840610/large.jpg",
+          "taxon_common_name": "Eurasian Eagle-Owl",
+          "taxon_name": "Bubo bubo",
+          "iconic_taxon_name": "Aves",
+          "location_name": "Hilvarenbeek, NL-NB, NL",
+          "observed_on": "2014-02-12",
+          "observer_name": "Paul Cools",
+          "photo_license": "cc-by-nc",
+          "id": 1
+        },
+        {
+          "photo_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/116793572/large.jpeg",
+          "taxon_common_name": "Domestic Mallard",
+          "taxon_name": "Anas platyrhynchos domesticus",
+          "iconic_taxon_name": "Aves",
+          "location_name": "Warmond, Zuid-Holland, Netherlands",
+          "observed_on": "2021-03-21",
+          "observer_name": "Michel Langeveld",
+          "photo_license": "cc-by",
+          "id": 1
+        },
+        {
+          "photo_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/648/large.jpg",
+          "taxon_common_name": "Western European Herring Gull",
+          "taxon_name": "Larus argentatus argenteus",
+          "iconic_taxon_name": "Aves",
+          "location_name": "Zonnemaire, Netherlands",
+          "observed_on": "2008-05-02",
+          "observer_name": "biogeek",
+          "photo_license": "cc-by",
+          "id": 1
+        },
+        {
+          "photo_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/69570421/large.jpg",
+          "taxon_common_name": "Horned Grebe",
+          "taxon_name": "Podiceps auritus",
+          "iconic_taxon_name": "Aves",
+          "location_name": "Tilburg, NL-NB, NL",
+          "observed_on": "2020-04-26",
+          "observer_name": "Paul Cools",
+          "photo_license": "cc-by-nc",
+          "id": 1
+        }
+      ],
+      "total_count": 997,
+      "error": null
+    }
+  }
+}

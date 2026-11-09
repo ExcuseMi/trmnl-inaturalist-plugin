@@ -4,7 +4,7 @@ no_screen_padding: 'no'
 dark_mode: 'no'
 static_data: ''
 polling_verb: post
-framework_version: 2.3.7
+framework_version: 3.4.6
 serverless_language: node
 polling_url: https://trmnl.bettens.dev/inaturalist/observation
 polling_headers: 'Content-Type: application/json'

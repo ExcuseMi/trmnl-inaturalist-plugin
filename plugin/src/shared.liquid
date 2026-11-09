@@ -1,70 +1,58 @@
 {% template main %}
-<style>
-  .inat-empty  { position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
-  .inat-empty--visible { display: flex; }
-  .inat-license { position: absolute; top: 2px; right: 5px; z-index: 50; }
-  .inat-qr .qr-code { position: absolute; right: auto; left: 5px; top: 5px; z-index: 51; padding: 5px; border: solid 1px black; box-sizing: content-box; }
-</style>
+<script>var __inat = {{ items | json }}; var __inatView = {{ view | default: 1 }}; var __inatLocale = {{ trmnl.user.locale | default: 'en' | json }};</script>
 
-<script>var __inat = {{ items | json }};</script>
-
-{% if trmnl.plugin_settings.custom_fields_values.show_qr == "true" %}
-  {% for item in items %}
-  <div class="inat-qr inat-qr-{{ forloop.index0 }} hidden">
-    {{ item.inat_url | qr_code: 2, "m", "fixed" }}
-  </div>
-  {% endfor %}
-{% endif %}
-
-<div class="layout layout--stretch gap--none m--0 p--0">
-  <img class="image image-dither image--contain inat-img hidden" alt="" />
-  <span class="label label--inverted inat-license hidden"></span>
-  <div class="inat-empty hidden">
-    <span class="label label--small">iNaturalist</span>
-    <span class="description text--center">{{ error | default: 'No observations found.' }}</span>
+<div class="layout layout--col gap--none m--0 p--0">
+  <div class="relative stretch w--full">
+    <img class="absolute inset--0 image image-dither image--cover w--full h--full inat-img hidden" alt="" />
+    {% if trmnl.plugin_settings.custom_fields_values.show_qr == "true" %}
+      {% for item in items %}
+      <div class="absolute top--3 left--3 z--3 p--1 bg--white outline inat-qr inat-qr-{{ forloop.index0 }} hidden">
+        {{ item.inat_url | qr_code: 2, "m", "fixed" }}
+      </div>
+      {% endfor %}
+    {% endif %}
+    <div class="absolute bottom--3 right--3 z--2 px--2 py--1 bg--white outline inat-credit-box hidden">
+      <span class="label label--small inat-credit"></span>
+    </div>
+    <div class="flex flex--col flex--center gap h--full inat-empty hidden">
+      <span class="title">Nothing seen yet</span>
+      <span class="description text--center">{{ error | default: 'No observations found.' }}</span>
+    </div>
   </div>
 </div>
 
 <div class="title_bar">
-  <svg class="h--8 image--stroke" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><defs><style>.a{fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;}.b{fill:#000000;}</style></defs><path class="a" d="M30.56,23.21c.88,0,3.06-8.39,12.94-5.05-4.76,3.63-2.1,8.66-6.86,15.21A18.47,18.47,0,0,1,22,41.11a18.67,18.67,0,0,1-6.91-1.25A16,16,0,0,0,27,31.61a12.15,12.15,0,0,1-14-5.8,18.07,18.07,0,0,1,4.67-.69s-8.14-3.27-9-5.85c1.21-.95,4.94-.42,4.94-.42S5,14.1,4.5,10.86C19.75,10.86,29.73,23.21,30.56,23.21Z"/><path class="a" d="M24.32,18S19.15,11.42,19,6.89C22.91,7,30.29,13,31.27,22.41"/><circle class="b" cx="37.97" cy="19.87" r="0.75"/></svg>
-  <span class="title text--stroke inat-title"></span>
-  <span class="instance text--stroke inat-instance"></span>
+  <svg class="h--8 image--stroke image--adaptive" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#ffffff" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" d="M30.56,23.21c.88,0,3.06-8.39,12.94-5.05-4.76,3.63-2.1,8.66-6.86,15.21A18.47,18.47,0,0,1,22,41.11a18.67,18.67,0,0,1-6.91-1.25A16,16,0,0,0,27,31.61a12.15,12.15,0,0,1-14-5.8,18.07,18.07,0,0,1,4.67-.69s-8.14-3.27-9-5.85c1.21-.95,4.94-.42,4.94-.42S5,14.1,4.5,10.86C19.75,10.86,29.73,23.21,30.56,23.21Z"/><path fill="#ffffff" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" d="M24.32,18S19.15,11.42,19,6.89C22.91,7,30.29,13,31.27,22.41"/><circle fill="#000000" cx="37.97" cy="19.87" r="0.75"/></svg>
+  <span class="title inat-species"></span>
+  <span class="instance inat-instance"></span>
 </div>
 
 <script>
 (function() {
-  var self   = document.currentScript;
-  var views  = Array.from(document.querySelectorAll('.view'));
-  var host   = views.find(function(v) { return v.contains(self); }) || document.body;
-  var idx    = views.indexOf(host) % 4;
-  var item   = (__inat || [])[idx] || null;
-
-  if (!item || !item.photo_url) {
-    var empty = host.querySelector('.inat-empty');
-    if (empty) empty.classList.replace('hidden', 'inat-empty--visible');
-    return;
+  var self = document.currentScript;
+  var views = Array.from(document.querySelectorAll('.view'));
+  var host = views.find(function(v) { return v.contains(self); }) || document.body;
+  var idx = Math.max(0, views.indexOf(host)) % 4;
+  var item = (__inat || [])[idx] || null;
+  var $ = function(c) { return host.querySelector(c); };
+  if (!item || !item.photo_url) { $('.inat-empty').classList.remove('hidden'); return; }
+  var GROUP = { Aves: 'Bird', Mammalia: 'Mammal', Reptilia: 'Reptile', Amphibia: 'Amphibian', Actinopterygii: 'Fish',
+    Insecta: 'Insect', Arachnida: 'Spider', Mollusca: 'Mollusc', Plantae: 'Plant', Fungi: 'Fungus' };
+  var img = $('.inat-img'); img.src = item.photo_url; img.classList.remove('hidden');
+  var qr = $('.inat-qr-' + idx); if (qr) qr.classList.remove('hidden');
+  if (item.license && item.license !== 'CC0') $('.inat-credit-box').classList.remove('hidden');
+  $('.inat-species').textContent = (item.species || item.scientific || '');
+  var when = '';
+  if (item.observed_on) {
+    var d = new Date(item.observed_on + 'T12:00:00');
+    when = 'Seen ' + d.toLocaleDateString(__inatLocale, { day: 'numeric', month: 'short', year: 'numeric' });
   }
-
-  var img = host.querySelector('.inat-img');
-  if (img) { img.src = item.photo_url; img.classList.remove('hidden'); }
-
-  var titleEl = host.querySelector('.inat-title');
-  if (titleEl) titleEl.textContent = item.species || item.scientific || '';
-
-  var instanceEl = host.querySelector('.inat-instance');
-  if (instanceEl) instanceEl.textContent = item.location || '';
-
-  var qrEl = host.querySelector('.inat-qr-' + idx);
-  if (qrEl) qrEl.classList.remove('hidden');
-
-  var licenseEl = host.querySelector('.inat-license');
-  if (licenseEl && item.license && item.license !== 'cc0') {
-    var attr = [];
-    if (item.observer) attr.push(item.observer);
-    attr.push(item.license);
-    licenseEl.textContent = attr.join(' · ');
-    licenseEl.classList.remove('hidden');
-  }
+  var place = (item.location || '').split(',').slice(0, 2).join(',').trim();
+  var parts = __inatView >= 3 ? [when || place] : [when, place];
+  // narrow views have no room beside a long species name: title only
+  if (__inatView >= 3 && ($('.inat-species').textContent || '').length > 18) parts = [];
+  $('.inat-instance').textContent = parts.filter(Boolean).join(' \u00b7 ');
+  $('.inat-credit').textContent = [(item.observer || 'iNaturalist'), item.license].filter(Boolean).join(' · ');
 })();
 </script>
 {% endtemplate %}
